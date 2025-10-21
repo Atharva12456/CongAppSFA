@@ -977,13 +977,13 @@ export default function MindMapMVP() {
     setCamera({ zoom: scale, x: nx, y: ny });
   }, [boardNodes, setCamera, viewport.h, viewport.w]);
 
-  // Double-click empty canvas -> note
-  const onCanvasDoubleClick = (e: React.MouseEvent) => {
-    const rect = containerRef.current!.getBoundingClientRect();
-    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, cam);
-    const id = addNode({ x: w.x, y: w.y, text: "" });
-    focusNode(id);
-  };
+  // Double-click empty canvas -> note (DISABLED)
+  // const onCanvasDoubleClick = (e: React.MouseEvent) => {
+  //   const rect = containerRef.current!.getBoundingClientRect();
+  //   const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, cam);
+  //   const id = addNode({ x: w.x, y: w.y, text: "" });
+  //   focusNode(id);
+  // };
 
   const hasBoards = boardOrder.length > 0;
 
@@ -1052,7 +1052,6 @@ export default function MindMapMVP() {
         onWheel={onWheel}
         onContextMenu={onContextMenu}
         onMouseDown={onMouseDownCanvas}
-        onDoubleClick={onCanvasDoubleClick}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
