@@ -189,7 +189,7 @@ const useStore = create<StoreState>((set, get) => ({
   edges: {},
   strokes: {},
   mode: "select",
-  penColor: "#000000",
+  penColor: "#ff0000",
   penSize: 2,
   isPanning: false,
 
@@ -1017,21 +1017,29 @@ export default function MindMapMVP() {
           <button className="py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700" onClick={fitToScreen}>Fit</button>
           <button className="col-span-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700" onClick={exportPNG}>Export PNG</button>
           <div className="col-span-2">
-            <div className="text-xs mb-1.5">Pen Color</div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="text-xs mb-1.5">Pen Controls</div>
+            <div className="flex items-center gap-2">
               <input
                 type="color"
                 value={penColor}
                 onChange={(e) => useStore.setState({ penColor: e.target.value })}
-                className="w-12 h-8 rounded cursor-pointer border border-zinc-600"
+                className="w-8 h-8 rounded cursor-pointer border border-zinc-600"
+                title="Pen Color"
               />
-              <div className="flex-1 text-[10px] text-zinc-400 font-mono">{penColor.toUpperCase()}</div>
+              <div className="flex items-center gap-1">
+                <button 
+                  className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-xs"
+                  onClick={() => useStore.setState({ penSize: Math.max(1, penSize - 1) })}
+                  title="Decrease Size"
+                >-</button>
+                <div className="w-8 text-center text-xs text-zinc-300">{penSize}px</div>
+                <button 
+                  className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-xs"
+                  onClick={() => useStore.setState({ penSize: Math.min(10, penSize + 1) })}
+                  title="Increase Size"
+                >+</button>
+              </div>
             </div>
-            <div className="text-xs mb-1.5">Pen Size</div>
-            <div className="flex gap-1.5">
-              <button className={`flex-1 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 ${penSize === 2 ? "ring-2 ring-blue-500" : ""}`} onClick={() => useStore.setState({ penSize: 2 })}>2px</button>
-              <button className={`flex-1 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 ${penSize === 4 ? "ring-2 ring-blue-500" : ""}`} onClick={() => useStore.setState({ penSize: 4 })}>4px</button>
-          </div>
           </div>
           <button className="col-span-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700" onClick={clearPen}>Clear Drawings</button>
         </div>
