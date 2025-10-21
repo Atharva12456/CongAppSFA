@@ -76,7 +76,7 @@ type StrokeT = {
   boardId: ID;
   points: StrokePoint[];
   color: string;
-  size: 2 | 4;
+  size: number;
 };
 
 type Mode = "select" | "pen" | "eraser";
@@ -121,6 +121,8 @@ type PersistedState = {
   nodes: Record<ID, NodeT>;
   edges: Record<ID, EdgeT>;
   strokes: Record<ID, StrokeT>;
+  penColor: string;
+  penSize: number;
 };
 
 // =====================================================
@@ -173,6 +175,8 @@ const serializeState = (s: StoreState): PersistedState => ({
   nodes: s.nodes,
   edges: s.edges,
   strokes: s.strokes,
+  penColor: s.penColor,
+  penSize: s.penSize,
 });
 
 let _saveTimer: number | null = null;
@@ -434,6 +438,8 @@ const useStore = create<StoreState>((set, get) => ({
         nodes: data.nodes ?? s.nodes,
         edges: data.edges ?? s.edges,
         strokes: data.strokes ?? s.strokes,
+        penColor: data.penColor ?? s.penColor,
+        penSize: data.penSize ?? s.penSize,
       }));
     }
   },
