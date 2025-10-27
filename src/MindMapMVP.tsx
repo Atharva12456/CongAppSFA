@@ -541,18 +541,6 @@ export default function MindMapMVP() {
   const currentBoard = currentBoardId ? boards[currentBoardId] : null;
   const cam = currentBoard?.camera ?? { x: 0, y: 0, zoom: 1 };
 
-  // viewport size (for minimap + fit)
-  const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
-  useEffect(() => {
-    const update = () => {
-      if (!containerRef.current) return;
-      setViewport({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-
   // Modals
   const [showNewPrompt, setShowNewPrompt] = useState(false);
   const [newPromptTitle, setNewPromptTitle] = useState("");
@@ -565,6 +553,23 @@ export default function MindMapMVP() {
   
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // viewport size (for minimap + fit)
+  const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
+  useEffect(() => {
+    const update = () => {
+      if (!containerRef.current) return;
+      setViewport({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
+    };
+    update();
+    // Also update after sidebar animation completes (300ms)
+    const timer = setTimeout(update, 350);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      clearTimeout(timer);
+    };
+  }, [sidebarCollapsed]); // Update when sidebar collapses/expands
   
   // Eraser cursor
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(null);
@@ -1145,7 +1150,16 @@ export default function MindMapMVP() {
               const showLeft = !hasChildOnSide(n, 'left', nodes, edges) && connectedSide !== 'left';
               const isEditing = editing?.id === n.id;
               return (
-                <g key={n.id} transform={`translate(${x},${y})`} onMouseDown={(e) => onNodeMouseDown(e, n.id)} onDoubleClick={(e) => onNodeDoubleClick(e, n)}>
+                <g key={n.id} transform={`translate(${x},${y})`} 
+                   onMouseDown={(e) => onNodeMouseDown(e, n.id)} 
+                   onClick={(e) => {
+                     // If editing a different node, exit edit mode first
+                     if (editing && editing.id !== n.id) {
+                       e.stopPropagation();
+                       setEditing(null);
+                     }
+                   }}
+                   onDoubleClick={(e) => onNodeDoubleClick(e, n)}>
                   <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill="#18181b" stroke={isEditing ? "#3b82f6" : "#3f3f46"} strokeWidth={isEditing ? 2 : 1.6} />
                   {/* delete X */}
                   <g transform={`translate(${NODE_W - 18}, 6)`}>
