@@ -691,13 +691,19 @@ export default function MindMapMVP() {
       // Shift + scroll = pan (horizontal and vertical)
       setCamera({ x: cam.x - e.deltaX, y: cam.y - e.deltaY });
     } else {
-      // Default scroll = zoom (more intuitive for users)
-      const scale = Math.exp(-e.deltaY * 0.0015);
-      const newZoom = Math.min(2.5, Math.max(0.2, cam.zoom * scale));
-      const world = screenToWorld(sx, sy, cam);
-      const nx = sx - world.x * newZoom;
-      const ny = sy - world.y * newZoom;
-      setCamera({ zoom: newZoom, x: nx, y: ny });
+      // Check if both horizontal AND vertical scrolling (touchpad two-finger pan)
+      if (Math.abs(e.deltaX) > 0 && Math.abs(e.deltaY) > 0) {
+        // Two-finger pan on touchpad
+        setCamera({ x: cam.x - e.deltaX, y: cam.y - e.deltaY });
+      } else {
+        // Default scroll = zoom (mouse wheel or vertical-only touchpad)
+        const scale = Math.exp(-e.deltaY * 0.0015);
+        const newZoom = Math.min(2.5, Math.max(0.2, cam.zoom * scale));
+        const world = screenToWorld(sx, sy, cam);
+        const nx = sx - world.x * newZoom;
+        const ny = sy - world.y * newZoom;
+        setCamera({ zoom: newZoom, x: nx, y: ny });
+      }
     }
   }, [cam, currentBoard, setCamera]);
 
@@ -735,6 +741,9 @@ export default function MindMapMVP() {
     lastTouchX?: number;
     lastTouchY?: number;
     isPanning?: boolean;
+    initialCenterX?: number;
+    initialCenterY?: number;
+    isZooming?: boolean;
   } | null>(null);
   
   const getDistance = (t1: React.Touch, t2: React.Touch) => {
@@ -756,7 +765,7 @@ export default function MindMapMVP() {
         isPanning: true,
       };
     } else if (e.touches.length === 2) {
-      // Two fingers - prepare for pinch zoom
+      // Two fingers - prepare for pinch zoom or pan
       e.preventDefault();
       const t1 = e.touches[0];
       const t2 = e.touches[1];
@@ -766,10 +775,13 @@ export default function MindMapMVP() {
       touchState.current = {
         initialDist: dist,
         initialZoom: cam.zoom,
+        initialCenterX: centerX,
+        initialCenterY: centerY,
         centerX,
         centerY,
         lastTouchX: (t1.clientX + t2.clientX) / 2,
         lastTouchY: (t1.clientY + t2.clientY) / 2,
+        isZooming: false, // Will determine based on movement
       };
     }
   }, [cam.zoom]);
@@ -793,23 +805,37 @@ export default function MindMapMVP() {
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       const dist = getDistance(t1, t2);
-      const scale = dist / touchState.current.initialDist;
-      const newZoom = Math.min(2.5, Math.max(0.2, touchState.current.initialZoom! * scale));
+      const distChanged = Math.abs(dist - touchState.current.initialDist);
       
-      // Calculate current center
+      // Current center
       const currentCenterX = (t1.clientX + t2.clientX) / 2;
       const currentCenterY = (t1.clientY + t2.clientY) / 2;
       
-      // Pan delta
-      const panDx = currentCenterX - touchState.current.lastTouchX!;
-      const panDy = currentCenterY - touchState.current.lastTouchY!;
-      
-      // Zoom around the initial center point
-      const world = screenToWorld(touchState.current.centerX!, touchState.current.centerY!, { ...cam, zoom: touchState.current.initialZoom! });
-      const nx = touchState.current.centerX! - world.x * newZoom + panDx;
-      const ny = touchState.current.centerY! - world.y * newZoom + panDy;
-      
-      setCamera({ zoom: newZoom, x: nx, y: ny });
+      // Detect if user is zooming (finger distance changed) or panning (only position changed)
+      const threshold = 10; // Pixels
+      if (distChanged > threshold || touchState.current.isZooming) {
+        // User is zooming - handle zoom
+        touchState.current.isZooming = true;
+        const scale = dist / touchState.current.initialDist;
+        const newZoom = Math.min(2.5, Math.max(0.2, touchState.current.initialZoom! * scale));
+        
+        // Pan delta
+        const panDx = currentCenterX - touchState.current.lastTouchX!;
+        const panDy = currentCenterY - touchState.current.lastTouchY!;
+        
+        // Zoom around the initial center point
+        const world = screenToWorld(touchState.current.centerX!, touchState.current.centerY!, { ...cam, zoom: touchState.current.initialZoom! });
+        const nx = touchState.current.centerX! - world.x * newZoom + panDx;
+        const ny = touchState.current.centerY! - world.y * newZoom + panDy;
+        
+        setCamera({ zoom: newZoom, x: nx, y: ny });
+      } else {
+        // User is panning - just move the view
+        const dx = currentCenterX - touchState.current.lastTouchX!;
+        const dy = currentCenterY - touchState.current.lastTouchY!;
+        
+        setCamera({ x: cam.x + dx, y: cam.y + dy });
+      }
       
       touchState.current.lastTouchX = currentCenterX;
       touchState.current.lastTouchY = currentCenterY;
@@ -1173,7 +1199,7 @@ export default function MindMapMVP() {
 
                   {!isEditing && (
                   <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
-                      <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Empty node</span>}</div>
+                      <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Double-Click to edit</span>}</div>
                   </foreignObject>
                   )}
 
@@ -1283,6 +1309,7 @@ export default function MindMapMVP() {
             <MiniMap 
               key={`${cam.x}-${cam.y}-${cam.zoom}-${viewport.w}-${viewport.h}`}
               nodes={boardNodes} 
+              edges={boardEdges}
               camera={cam} 
               box={mini} 
               viewport={viewport} 
@@ -1458,7 +1485,7 @@ function PlusHandle({ cx, cy, onClick }: { cx: number; cy: number; onClick: () =
   );
 }
 
-function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom = 1 }: { x: number; y: number; initial: string; onSubmit: (txt: string) => void; onCancel: () => void; zoom?: number; }) {
+function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom }: { x: number; y: number; initial: string; onSubmit: (txt: string) => void; onCancel: () => void; zoom: number; }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [val, setVal] = useState(initial);
   const hasSubmitted = useRef(false);
@@ -1487,22 +1514,29 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom = 1 }: { x: numb
     }
   };
   
-  // Scale the editor to match zoom level
-  const scaledW = NODE_W * zoom;
-  const scaledH = NODE_H * zoom;
-  
+  // Scale editor to match zoom
+  // Position using base size, then scale from center
   return (
-    <div className="absolute bg-zinc-800 rounded-xl shadow-lg" style={{ 
-      left: x - scaledW / 2, 
-      top: y - scaledH / 2, 
-      width: scaledW, 
-      height: scaledH,
-      transform: `scale(${zoom > 1 ? 1 : zoom})`
-    }}>
+    <div 
+      className="absolute bg-zinc-800 rounded-xl shadow-lg" 
+      style={{ 
+        left: x - NODE_W / 2,  // Center on node position
+        top: y - NODE_H / 2,   // Center on node position
+        width: NODE_W,  // Always base size
+        height: NODE_H,  // Always base size
+        transform: `scale(${zoom})`,
+        transformOrigin: 'center center'
+      }}
+    >
       <textarea
         ref={inputRef}
-        className="w-full h-full text-sm text-zinc-100 bg-zinc-800 border-2 border-blue-500 rounded-xl px-3 py-2.5 outline-none resize-none leading-snug"
-        style={{ fontFamily: "Inter, sans-serif" }}
+        className="w-full h-full text-zinc-100 bg-zinc-800 border-2 border-blue-500 rounded-xl px-3 py-2.5 outline-none resize-none leading-snug overflow-hidden"
+        style={{ 
+          fontFamily: "Inter, sans-serif",
+          fontSize: '13px',  // Fixed pixel size, scales naturally with container zoom
+          scrollbarWidth: 'none',  // Hide scrollbar for Firefox
+          msOverflowStyle: 'none',  // Hide scrollbar for IE/Edge
+        }}
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onKeyDown={(e) => { 
@@ -1518,6 +1552,11 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom = 1 }: { x: numb
         onBlur={handleSubmit}
         placeholder="Type here..."
       />
+      <style>{`
+        textarea::-webkit-scrollbar {
+          display: none; /* Hide scrollbar for Chrome, Safari */
+        }
+      `}</style>
     </div>
   );
 }
@@ -1538,8 +1577,9 @@ function BoardTab({ board, active, onClick, onRenameClick, onDeleteClick }: { bo
   );
 }
 
-function MiniMap({ nodes, camera, box, viewport }: { 
+function MiniMap({ nodes, edges, camera, box, viewport }: { 
   nodes: NodeT[]; 
+  edges: EdgeT[];
   camera: Camera; 
   box: { minX: number; maxX: number; minY: number; maxY: number };
   viewport: { w: number; h: number };
@@ -1581,9 +1621,38 @@ function MiniMap({ nodes, camera, box, viewport }: {
   const nodeW = baseNodeW * zoomScale;
   const nodeH = baseNodeH * zoomScale;
 
+  // Create a nodes lookup map
+  const nodesMap = new Map(nodes.map(n => [n.id, n]));
+
   return (
     <svg className="w-full h-full">
       <rect x={0} y={0} width="100%" height="100%" fill="#0a0a0a" stroke="#3f3f46" rx={10} />
+      
+      {/* Draw connection lines */}
+      {edges.map((e) => {
+        const parent = nodesMap.get(e.parentNodeId);
+        const child = nodesMap.get(e.childNodeId);
+        if (!parent || !child) return null;
+        
+        const x1 = parent.x * s + offX;
+        const y1 = parent.y * s + offY;
+        const x2 = child.x * s + offX;
+        const y2 = child.y * s + offY;
+        
+        return (
+          <line 
+            key={e.id}
+            x1={x1} 
+            y1={y1} 
+            x2={x2} 
+            y2={y2} 
+            stroke="#666" 
+            strokeWidth={0.5}
+          />
+        );
+      })}
+      
+      {/* Draw nodes */}
       {nodes.map((n) => (
         <rect 
           key={n.id} 
@@ -1595,6 +1664,8 @@ function MiniMap({ nodes, camera, box, viewport }: {
           rx={2} 
         />
       ))}
+      
+      {/* Viewport indicator */}
       <rect 
         x={viewportX} 
         y={viewportY} 
