@@ -1556,6 +1556,12 @@ function MiniMap({ nodes, camera, box, viewport }: {
   const viewportY = tl.y * s + offY;
   const viewportW = (br.x - tl.x) * s;
   const viewportH = (br.y - tl.y) * s;
+  
+  // Scale node size based on zoom level (smaller when zoomed out, larger when zoomed in)
+  // At 100% zoom, nodes are normal size. At 50% zoom, nodes are half size, etc.
+  const nodeScale = Math.max(0.3, Math.min(1.5, camera.zoom));
+  const nodeW = 14 * nodeScale;
+  const nodeH = 9 * nodeScale;
 
   return (
     <svg className="w-full h-full">
@@ -1563,10 +1569,10 @@ function MiniMap({ nodes, camera, box, viewport }: {
       {nodes.map((n) => (
         <rect 
           key={n.id} 
-          x={n.x * s + offX} 
-          y={n.y * s + offY} 
-          width={14} 
-          height={9} 
+          x={n.x * s + offX - nodeW / 2} 
+          y={n.y * s + offY - nodeH / 2} 
+          width={nodeW} 
+          height={nodeH} 
           fill="#52525b" 
           rx={2} 
         />
