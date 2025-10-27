@@ -1002,8 +1002,7 @@ export default function MindMapMVP() {
 
   return (
     <div className="w-full h-screen flex bg-zinc-900 text-zinc-100 select-none">
-      {/* Show sidebar only when NOT on homepage */}
-      {!showHomepage && (
+      {/* Sidebar - always visible */}
       <div className={`border-r border-zinc-800 p-3 flex flex-col gap-2 relative z-10 transition-all duration-300 ${sidebarCollapsed ? 'w-0 p-0 overflow-hidden' : 'w-[280px]'}`}>
         <div className="text-xs font-semibold tracking-wide mb-1">Boards</div>
         <div className="flex-1 overflow-auto">
@@ -1063,7 +1062,6 @@ export default function MindMapMVP() {
           <div className="mt-1"><strong>Scroll</strong> Zoom • <strong>Shift+Scroll</strong> Pan • <strong>Click+Drag</strong> Pan</div>
         </div>
       </div>
-      )}
 
       {/* Canvas Area - Only show when NOT on homepage */}
       {!showHomepage && (
