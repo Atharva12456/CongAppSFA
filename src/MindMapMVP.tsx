@@ -1275,7 +1275,13 @@ export default function MindMapMVP() {
         {/* Mini-map */}
         {hasBoards && mini && (
           <div className="absolute right-3 bottom-3 w-44 h-28 bg-zinc-800/80 border border-zinc-700 rounded-xl p-1 pointer-events-none">
-            <MiniMap nodes={boardNodes} camera={cam} box={mini} viewport={viewport} />
+            <MiniMap 
+              key={`${cam.x}-${cam.y}-${cam.zoom}-${viewport.w}-${viewport.h}`}
+              nodes={boardNodes} 
+              camera={cam} 
+              box={mini} 
+              viewport={viewport} 
+            />
             <div className="absolute top-1 right-1 px-2 py-0.5 bg-zinc-900/90 rounded text-[10px] text-zinc-300 font-semibold">
               {Math.round(cam.zoom * 100)}%
             </div>
@@ -1568,11 +1574,12 @@ function MiniMap({ nodes, camera, box, viewport }: {
       <rect 
         x={viewportX} 
         y={viewportY} 
-        width={viewportW} 
-        height={viewportH} 
-        fill="rgba(96, 165, 250, 0.1)" 
+        width={Math.max(viewportW, 1)} 
+        height={Math.max(viewportH, 1)} 
+        fill="rgba(96, 165, 250, 0.15)" 
         stroke="#60a5fa" 
-        strokeWidth={1.5} 
+        strokeWidth={2} 
+        rx={2}
       />
     </svg>
   );
