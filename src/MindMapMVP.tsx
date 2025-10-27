@@ -560,6 +560,12 @@ export default function MindMapMVP() {
   const [showRenameBoard, setShowRenameBoard] = useState<{ id: ID; title: string } | null>(null);
   const [renameBoardTitle, setRenameBoardTitle] = useState("");
   
+  // Homepage state (show by default if no boards)
+  const [showHomepage, setShowHomepage] = useState(() => boardOrder.length === 0);
+  
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
   // Eraser cursor
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(null);
   const [isErasing, setIsErasing] = useState(false);
@@ -672,21 +678,21 @@ export default function MindMapMVP() {
       const sensitivity = Math.abs(delta) > 100 ? 0.005 : 0.01; // Less sensitive for large deltas
       const scale = Math.exp(-delta * sensitivity);
       const newZoom = Math.min(2.5, Math.max(0.2, cam.zoom * scale));
-    const world = screenToWorld(sx, sy, cam);
-    const nx = sx - world.x * newZoom;
-    const ny = sy - world.y * newZoom;
-    setCamera({ zoom: newZoom, x: nx, y: ny });
+      const world = screenToWorld(sx, sy, cam);
+      const nx = sx - world.x * newZoom;
+      const ny = sy - world.y * newZoom;
+      setCamera({ zoom: newZoom, x: nx, y: ny });
     } else if (e.shiftKey) {
-      // Shift + scroll = zoom (alternative method)
+      // Shift + scroll = pan (horizontal and vertical)
+      setCamera({ x: cam.x - e.deltaX, y: cam.y - e.deltaY });
+    } else {
+      // Default scroll = zoom (more intuitive for users)
       const scale = Math.exp(-e.deltaY * 0.0015);
       const newZoom = Math.min(2.5, Math.max(0.2, cam.zoom * scale));
       const world = screenToWorld(sx, sy, cam);
       const nx = sx - world.x * newZoom;
       const ny = sy - world.y * newZoom;
       setCamera({ zoom: newZoom, x: nx, y: ny });
-    } else {
-      // Two-finger scroll/pan on touchpad
-      setCamera({ x: cam.x - e.deltaX, y: cam.y - e.deltaY });
     }
   }, [cam, currentBoard, setCamera]);
 
@@ -694,13 +700,14 @@ export default function MindMapMVP() {
   const panState = useRef<{ lastX: number; lastY: number; active: boolean } | null>(null);
   const onMouseDownCanvas = useCallback((e: React.MouseEvent) => {
     const store = useStore.getState();
-    if ((store.isPanning && e.button === 0) || e.button === 1) {
+    // Enable panning on: Space+left click, middle click, OR left click in select mode on canvas
+    if ((store.isPanning && e.button === 0) || e.button === 1 || (e.button === 0 && mode === 'select')) {
       e.preventDefault();
       panState.current = { lastX: e.clientX, lastY: e.clientY, active: true };
       if (!store.isPanning) store.setPanning(true);
       return;
     }
-  }, []);
+  }, [mode]);
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (useStore.getState().isPanning && panState.current?.active) {
       const prev = panState.current; if (!prev) return;
@@ -994,9 +1001,9 @@ export default function MindMapMVP() {
   const hasBoards = boardOrder.length > 0;
 
   return (
-    <div className="w-full h-screen grid grid-cols-[280px_1fr] bg-zinc-900 text-zinc-100 select-none">
+    <div className="w-full h-screen flex bg-zinc-900 text-zinc-100 select-none">
       {/* Sidebar */}
-      <div className="border-r border-zinc-800 p-3 flex flex-col gap-2 relative z-10">
+      <div className={`border-r border-zinc-800 p-3 flex flex-col gap-2 relative z-10 transition-all duration-300 ${sidebarCollapsed ? 'w-0 p-0 overflow-hidden' : 'w-[280px]'}`}>
         <div className="text-xs font-semibold tracking-wide mb-1">Boards</div>
         <div className="flex-1 overflow-auto">
           {boardOrder.map((id) => (
@@ -1004,7 +1011,7 @@ export default function MindMapMVP() {
               key={id}
               board={boards[id]}
               active={currentBoardId === id}
-              onClick={() => switchBoard(id)}
+              onClick={() => { switchBoard(id); setShowHomepage(false); }}
               onRenameClick={() => { setShowRenameBoard({ id, title: boards[id].title }); setRenameBoardTitle(boards[id].title); }}
               onDeleteClick={() => setShowDeleteConfirm({ id, title: boards[id].title })}
             />
@@ -1051,13 +1058,14 @@ export default function MindMapMVP() {
         </div>
 
         <div className="mt-2 text-[10px] text-zinc-500 leading-tight">
-          <div><strong>V</strong> Select • <strong>P</strong> Pen • <strong>E</strong> Eraser • <strong>Space</strong> Pan</div>
+          <div><strong>V</strong> Select • <strong>P</strong> Pen • <strong>E</strong> Eraser</div>
+          <div className="mt-1"><strong>Scroll</strong> Zoom • <strong>Shift+Scroll</strong> Pan • <strong>Click+Drag</strong> Pan</div>
         </div>
       </div>
 
       {/* Canvas Area */}
       <div
-        className={`relative bg-black ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
+        className={`relative bg-black flex-1 ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
         ref={containerRef}
         style={{ touchAction: 'none' }}
         onMouseMove={(e) => { onMouseMove(e); onContainerMouseMove(e); }}
@@ -1065,11 +1073,58 @@ export default function MindMapMVP() {
         onMouseLeave={onMouseUpLeave}
         onWheel={onWheel}
         onContextMenu={onContextMenu}
-        onMouseDown={onMouseDownCanvas}
+        onMouseDown={(e) => {
+          onMouseDownCanvas(e);
+          // Close editor when clicking on canvas (not on nodes)
+          if (editing && e.target === e.currentTarget) {
+            setEditing(null);
+          }
+        }}
+        onClick={(e) => {
+          // Also handle via click for better reliability
+          if (editing && (e.target === canvasRef.current || e.target === svgRef.current || e.target === containerRef.current)) {
+            setEditing(null);
+          }
+        }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
+        {/* Sidebar Toggle Button */}
+        <div className="absolute top-4 left-4 z-20">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-600 rounded-xl text-zinc-100 transition-colors backdrop-blur-sm"
+            title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {sidebarCollapsed ? (
+                <>
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              ) : (
+                <>
+                  <line x1="21" y1="6" x2="3" y2="6" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                  <line x1="15" y1="18" x2="3" y2="18" />
+                </>
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* ResearchRoot Logo */}
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            onClick={() => setShowHomepage(true)}
+            className="px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-600 rounded-xl text-zinc-100 font-semibold text-sm transition-colors backdrop-blur-sm"
+          >
+            ResearchRoot
+          </button>
+        </div>
+
         {/* SVG: nodes + edges */}
         {hasBoards && (
           <svg ref={svgRef} className="absolute inset-0 w-full h-full block" width="100%" height="100%" preserveAspectRatio="none" style={{ pointerEvents: (mode === 'pen' || mode === 'eraser') ? 'none' : 'auto' }}>
@@ -1099,7 +1154,7 @@ export default function MindMapMVP() {
 
                   {!isEditing && (
                   <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
-                      <div className="text-sm leading-snug text-zinc-200" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any }}>{n.text}</div>
+                      <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Empty node</span>}</div>
                   </foreignObject>
                   )}
 
@@ -1206,22 +1261,78 @@ export default function MindMapMVP() {
         {hasBoards && mini && (
           <div className="absolute right-3 bottom-3 w-44 h-28 bg-zinc-800/80 border border-zinc-700 rounded-xl p-1 pointer-events-none">
             <MiniMap nodes={boardNodes} camera={cam} box={mini} viewport={viewport} />
+            <div className="absolute top-1 right-1 px-2 py-0.5 bg-zinc-900/90 rounded text-[10px] text-zinc-300 font-semibold">
+              {Math.round(cam.zoom * 100)}%
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {!hasBoards && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
-            <div className="text-center">
-              <h1 className="text-4xl font-semibold mb-3 text-zinc-100">Mind Map</h1>
-              <p className="text-lg text-zinc-400">Visualize your ideas and organize your thoughts</p>
+        {/* Homepage */}
+        {showHomepage && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 px-4">
+            <div className="text-center max-w-3xl">
+              <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">ResearchRoot</h1>
+              <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
             </div>
-            <button 
-              className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-base font-medium transition-colors" 
-              onClick={() => setShowNewPrompt(true)}
-            >
-              Create your first board
-            </button>
+            
+            {/* Direct Input */}
+            <div className="w-full max-w-2xl">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="What would you like to research today?"
+                  className="w-full px-6 py-4 pr-32 rounded-2xl bg-zinc-800 border-2 border-zinc-700 focus:border-blue-500 outline-none text-zinc-100 text-lg placeholder-zinc-500 transition-colors"
+                  value={newPromptTitle}
+                  onChange={(e) => setNewPromptTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newPromptTitle.trim()) {
+                      const title = newPromptTitle.trim();
+                      createBoard(title, title);
+                      setShowHomepage(false);
+                      setNewPromptTitle("");
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (newPromptTitle.trim()) {
+                      const title = newPromptTitle.trim();
+                      createBoard(title, title);
+                      setShowHomepage(false);
+                      setNewPromptTitle("");
+                    }
+                  }}
+                  disabled={!newPromptTitle.trim()}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-medium transition-colors"
+                >
+                  Start →
+                </button>
+              </div>
+              <p className="text-sm text-zinc-500 mt-3 text-center">Press Enter or click Start to create your mind map</p>
+            </div>
+            
+            {/* Recent Boards */}
+            {hasBoards && (
+              <div className="w-full max-w-2xl mt-4">
+                <h2 className="text-sm font-semibold text-zinc-400 mb-3 uppercase tracking-wide">Recent Boards</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {boardOrder.slice(0, 4).map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => {
+                        switchBoard(id);
+                        setShowHomepage(false);
+                      }}
+                      className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-left transition-colors group"
+                    >
+                      <div className="text-zinc-100 font-medium truncate group-hover:text-blue-400 transition-colors">{boards[id].title}</div>
+                      <div className="text-xs text-zinc-500 mt-1">Updated {new Date(boards[id].updatedAt).toLocaleDateString()}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1342,10 +1453,10 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel }: { x: number; y: num
   };
   
   return (
-    <div className="absolute" style={{ left: x - NODE_W / 2, top: y - NODE_H / 2, width: NODE_W, height: NODE_H }}>
+    <div className="absolute bg-zinc-800 rounded-xl shadow-lg" style={{ left: x - NODE_W / 2, top: y - NODE_H / 2, width: NODE_W, height: NODE_H }}>
       <textarea
         ref={inputRef}
-        className="w-full h-full text-sm text-zinc-100 bg-transparent border-none rounded-xl px-3 py-2.5 outline-none resize-none"
+        className="w-full h-full text-sm text-zinc-100 bg-zinc-800 border-2 border-blue-500 rounded-xl px-3 py-2.5 outline-none resize-none leading-snug"
         style={{ fontFamily: "Inter, sans-serif" }}
         value={val}
         onChange={(e) => setVal(e.target.value)}
@@ -1360,6 +1471,7 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel }: { x: number; y: num
           }
         }}
         onBlur={handleSubmit}
+        placeholder="Type here..."
       />
     </div>
   );
