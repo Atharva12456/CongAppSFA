@@ -1303,7 +1303,14 @@ export default function MindMapMVP() {
               </div>
               <div className="flex justify-end gap-2 text-sm">
                 <button className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700" onClick={() => setShowDeleteConfirm(null)}>Cancel</button>
-                <button className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700" onClick={() => { deleteBoard(showDeleteConfirm.id); setShowDeleteConfirm(null); }}>Delete</button>
+                <button className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700" onClick={() => { 
+                  deleteBoard(showDeleteConfirm.id); 
+                  setShowDeleteConfirm(null); 
+                  // If no boards left, go to homepage
+                  if (boardOrder.length === 1) {
+                    setShowHomepage(true);
+                  }
+                }}>Delete</button>
               </div>
             </div>
           </div>
