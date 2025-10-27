@@ -1524,17 +1524,28 @@ function MiniMap({ nodes, camera, box, viewport }: {
   viewport: { w: number; h: number };
 }) {
   const w = 170, h = 90;
-  const scaleX = w / (box.maxX - box.minX);
-  const scaleY = h / (box.maxY - box.minY);
+  const pad = 5;
+  
+  // Calculate content dimensions
+  const contentW = box.maxX - box.minX;
+  const contentH = box.maxY - box.minY;
+  
+  // Scale to fit minimap with padding
+  const scaleX = (w - pad * 2) / contentW;
+  const scaleY = (h - pad * 2) / contentH;
   const s = Math.min(scaleX, scaleY);
-  const offX = -box.minX * s + 5;
-  const offY = -box.minY * s + 5;
+  
+  // Center the content in the minimap
+  const scaledW = contentW * s;
+  const scaledH = contentH * s;
+  const offX = (w - scaledW) / 2 - box.minX * s;
+  const offY = (h - scaledH) / 2 - box.minY * s;
 
   // Calculate viewport rectangle in world coordinates
   const tl = screenToWorld(0, 0, camera);
   const br = screenToWorld(viewport.w, viewport.h, camera);
   
-  // Convert to minimap coordinates
+  // Convert to minimap coordinates using the same transform as nodes
   const viewportX = tl.x * s + offX;
   const viewportY = tl.y * s + offY;
   const viewportW = (br.x - tl.x) * s;
