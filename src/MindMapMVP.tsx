@@ -1002,7 +1002,8 @@ export default function MindMapMVP() {
 
   return (
     <div className="w-full h-screen flex bg-zinc-900 text-zinc-100 select-none">
-      {/* Sidebar */}
+      {/* Show sidebar only when NOT on homepage */}
+      {!showHomepage && (
       <div className={`border-r border-zinc-800 p-3 flex flex-col gap-2 relative z-10 transition-all duration-300 ${sidebarCollapsed ? 'w-0 p-0 overflow-hidden' : 'w-[280px]'}`}>
         <div className="text-xs font-semibold tracking-wide mb-1">Boards</div>
         <div className="flex-1 overflow-auto">
@@ -1062,8 +1063,10 @@ export default function MindMapMVP() {
           <div className="mt-1"><strong>Scroll</strong> Zoom • <strong>Shift+Scroll</strong> Pan • <strong>Click+Drag</strong> Pan</div>
         </div>
       </div>
+      )}
 
-      {/* Canvas Area */}
+      {/* Canvas Area - Only show when NOT on homepage */}
+      {!showHomepage && (
       <div
         className={`relative bg-black flex-1 ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
         ref={containerRef}
@@ -1267,74 +1270,6 @@ export default function MindMapMVP() {
           </div>
         )}
 
-        {/* Homepage */}
-        {showHomepage && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 px-4">
-            <div className="text-center max-w-3xl">
-              <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">ResearchRoot</h1>
-              <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
-            </div>
-            
-            {/* Direct Input */}
-            <div className="w-full max-w-2xl">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="What would you like to research today?"
-                  className="w-full px-6 py-4 pr-32 rounded-2xl bg-zinc-800 border-2 border-zinc-700 focus:border-blue-500 outline-none text-zinc-100 text-lg placeholder-zinc-500 transition-colors"
-                  value={newPromptTitle}
-                  onChange={(e) => setNewPromptTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newPromptTitle.trim()) {
-                      const title = newPromptTitle.trim();
-                      createBoard(title, title);
-                      setShowHomepage(false);
-                      setNewPromptTitle("");
-                    }
-                  }}
-                  autoFocus
-                />
-                <button
-                  onClick={() => {
-                    if (newPromptTitle.trim()) {
-                      const title = newPromptTitle.trim();
-                      createBoard(title, title);
-                      setShowHomepage(false);
-                      setNewPromptTitle("");
-                    }
-                  }}
-                  disabled={!newPromptTitle.trim()}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-medium transition-colors"
-                >
-                  Start →
-                </button>
-              </div>
-              <p className="text-sm text-zinc-500 mt-3 text-center">Press Enter or click Start to create your mind map</p>
-            </div>
-            
-            {/* Recent Boards */}
-            {hasBoards && (
-              <div className="w-full max-w-2xl mt-4">
-                <h2 className="text-sm font-semibold text-zinc-400 mb-3 uppercase tracking-wide">Recent Boards</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {boardOrder.slice(0, 4).map((id) => (
-                    <button
-                      key={id}
-                      onClick={() => {
-                        switchBoard(id);
-                        setShowHomepage(false);
-                      }}
-                      className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-left transition-colors group"
-                    >
-                      <div className="text-zinc-100 font-medium truncate group-hover:text-blue-400 transition-colors">{boards[id].title}</div>
-                      <div className="text-xs text-zinc-500 mt-1">Updated {new Date(boards[id].updatedAt).toLocaleDateString()}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* New Prompt Modal */}
         {showNewPrompt && (
@@ -1410,6 +1345,76 @@ export default function MindMapMVP() {
           </div>
         )}
       </div>
+      )}
+
+      {/* Homepage - Full screen view */}
+      {showHomepage && (
+        <div className="flex-1 relative bg-zinc-900 flex flex-col items-center justify-center gap-8 px-4">
+          <div className="text-center max-w-3xl">
+            <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">ResearchRoot</h1>
+            <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
+          </div>
+          
+          {/* Direct Input */}
+          <div className="w-full max-w-2xl">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="What would you like to research today?"
+                className="w-full px-6 py-4 pr-32 rounded-2xl bg-zinc-800 border-2 border-zinc-700 focus:border-blue-500 outline-none text-zinc-100 text-lg placeholder-zinc-500 transition-colors"
+                value={newPromptTitle}
+                onChange={(e) => setNewPromptTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newPromptTitle.trim()) {
+                    const title = newPromptTitle.trim();
+                    createBoard(title, title);
+                    setShowHomepage(false);
+                    setNewPromptTitle("");
+                  }
+                }}
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  if (newPromptTitle.trim()) {
+                    const title = newPromptTitle.trim();
+                    createBoard(title, title);
+                    setShowHomepage(false);
+                    setNewPromptTitle("");
+                  }
+                }}
+                disabled={!newPromptTitle.trim()}
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-medium transition-colors"
+              >
+                Start →
+              </button>
+            </div>
+            <p className="text-sm text-zinc-500 mt-3 text-center">Press Enter or click Start to create your mind map</p>
+          </div>
+          
+          {/* Recent Boards */}
+          {hasBoards && (
+            <div className="w-full max-w-2xl mt-4">
+              <h2 className="text-sm font-semibold text-zinc-400 mb-3 uppercase tracking-wide">Recent Boards</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {boardOrder.slice(0, 4).map((id) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      switchBoard(id);
+                      setShowHomepage(false);
+                    }}
+                    className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-left transition-colors group"
+                  >
+                    <div className="text-zinc-100 font-medium truncate group-hover:text-blue-400 transition-colors">{boards[id].title}</div>
+                    <div className="text-xs text-zinc-500 mt-1">Updated {new Date(boards[id].updatedAt).toLocaleDateString()}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
