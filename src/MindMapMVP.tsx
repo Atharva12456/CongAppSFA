@@ -971,10 +971,15 @@ export default function MindMapMVP() {
   // Mini-map
   const mini = useMemo(() => {
     const ns = boardNodes; if (!ns.length) return null;
-    const xs = ns.map((n) => n.x); const ys = ns.map((n) => n.y);
-    const minX = Math.min(...xs) - 180, maxX = Math.max(...xs) + 180;
-    const minY = Math.min(...ys) - 120, maxY = Math.max(...ys) + 120;
-    return { minX, maxX, minY, maxY };
+    // Show a large fixed area on minimap instead of just node bounds
+    // This gives context of where you are in the full canvas space
+    const mapSize = 3000; // 3000 units in each direction from center
+    return { 
+      minX: -mapSize, 
+      maxX: mapSize, 
+      minY: -mapSize, 
+      maxY: mapSize 
+    };
   }, [boardNodes]);
 
   // Fit to screen (content-aware)
