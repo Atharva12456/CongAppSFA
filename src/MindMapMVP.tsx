@@ -812,8 +812,17 @@ export default function MindMapMVP() {
       const currentCenterY = (t1.clientY + t2.clientY) / 2;
       
       // Detect if user is zooming (finger distance changed) or panning (only position changed)
-      const threshold = 10; // Pixels
-      if (distChanged > threshold || touchState.current.isZooming) {
+      const threshold = 20; // Increased threshold to prevent accidental zooms
+      const panDelta = Math.sqrt(
+        Math.pow(currentCenterX - touchState.current.initialCenterX!, 2) + 
+        Math.pow(currentCenterY - touchState.current.initialCenterY!, 2)
+      );
+      
+      // Only zoom if:
+      // 1. User explicitly pinched/spread fingers (distChanged > threshold)
+      // 2. AND they haven't moved their center much (not panning)
+      // OR if already in zoom mode
+      if ((distChanged > threshold && panDelta < 30) || touchState.current.isZooming) {
         // User is zooming - handle zoom
         touchState.current.isZooming = true;
         const scale = dist / touchState.current.initialDist;
@@ -835,6 +844,9 @@ export default function MindMapMVP() {
         const dy = currentCenterY - touchState.current.lastTouchY!;
         
         setCamera({ x: cam.x + dx, y: cam.y + dy });
+        
+        // Reset initial distance to prevent accidental zoom during panning
+        touchState.current.initialDist = dist;
       }
       
       touchState.current.lastTouchX = currentCenterX;
@@ -1603,23 +1615,26 @@ function MiniMap({ nodes, edges, camera, box, viewport }: {
   const offY = (h - scaledH) / 2 - box.minY * s;
 
   // Calculate viewport rectangle in world coordinates
+  // screenToWorld converts screen coordinates (0,0 to w,h) to world coordinates
   const tl = screenToWorld(0, 0, camera);
+  const tr = screenToWorld(viewport.w, 0, camera);
   const br = screenToWorld(viewport.w, viewport.h, camera);
+  const bl = screenToWorld(0, viewport.h, camera);
   
   // Convert to minimap coordinates using the same transform as nodes
-  const viewportX = tl.x * s + offX;
-  const viewportY = tl.y * s + offY;
-  const viewportW = (br.x - tl.x) * s;
-  const viewportH = (br.y - tl.y) * s;
+  const minX = Math.min(tl.x, tr.x, br.x, bl.x);
+  const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
+  const minY = Math.min(tl.y, tr.y, br.y, bl.y);
+  const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
+  
+  const viewportX = minX * s + offX;
+  const viewportY = minY * s + offY;
+  const viewportW = (maxX - minX) * s;
+  const viewportH = (maxY - minY) * s;
 
-  // Node size on minimap - scale with zoom level
-  // When zoomed in (>100%), nodes appear larger
-  // When zoomed out (<100%), nodes appear smaller
-  const baseNodeW = 14;
-  const baseNodeH = 9;
-  const zoomScale = Math.max(0.4, Math.min(1.8, camera.zoom));
-  const nodeW = baseNodeW * zoomScale;
-  const nodeH = baseNodeH * zoomScale;
+  // Fixed node size on minimap - always the same
+  const nodeW = 14;
+  const nodeH = 9;
 
   // Create a nodes lookup map
   const nodesMap = new Map(nodes.map(n => [n.id, n]));
