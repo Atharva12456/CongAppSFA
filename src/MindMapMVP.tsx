@@ -860,6 +860,12 @@ export default function MindMapMVP() {
 
   // Shortcuts
   useEvent("keydown", (e: KeyboardEvent) => {
+    // Don't prevent default if user is typing in an input/textarea
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return; // Let the input handle it
+    }
+    
     if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
       e.preventDefault();
       const ev = { preventDefault() {}, clientX: window.innerWidth/2, clientY: window.innerHeight/2, deltaY: -100 } as any;
@@ -1515,7 +1521,8 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom }: { x: number; 
   const handleSubmit = () => {
     if (!hasSubmitted.current) {
       hasSubmitted.current = true;
-      onSubmit(val.trim());
+      // Don't trim - allow multiple words and preserve spaces
+      onSubmit(val);
     }
   };
   
