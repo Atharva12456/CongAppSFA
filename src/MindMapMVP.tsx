@@ -1347,7 +1347,7 @@ export default function MindMapMVP() {
 
       {/* Homepage - Full screen view */}
       {showHomepage && (
-        <div className="flex-1 relative bg-zinc-900 flex flex-col items-center justify-center gap-8 px-4">
+        <div className="flex-1 relative bg-black flex flex-col items-center justify-center gap-8 px-4">
           <div className="text-center max-w-3xl">
             <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">ResearchRoot</h1>
             <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
