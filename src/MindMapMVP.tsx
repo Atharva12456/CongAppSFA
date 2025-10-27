@@ -683,10 +683,10 @@ export default function MindMapMVP() {
       const sensitivity = Math.abs(delta) > 100 ? 0.005 : 0.01; // Less sensitive for large deltas
       const scale = Math.exp(-delta * sensitivity);
       const newZoom = Math.min(2.5, Math.max(0.2, cam.zoom * scale));
-      const world = screenToWorld(sx, sy, cam);
-      const nx = sx - world.x * newZoom;
-      const ny = sy - world.y * newZoom;
-      setCamera({ zoom: newZoom, x: nx, y: ny });
+    const world = screenToWorld(sx, sy, cam);
+    const nx = sx - world.x * newZoom;
+    const ny = sy - world.y * newZoom;
+    setCamera({ zoom: newZoom, x: nx, y: ny });
     } else if (e.shiftKey) {
       // Shift + scroll = pan (horizontal and vertical)
       setCamera({ x: cam.x - e.deltaX, y: cam.y - e.deltaY });
@@ -971,15 +971,14 @@ export default function MindMapMVP() {
   // Mini-map
   const mini = useMemo(() => {
     const ns = boardNodes; if (!ns.length) return null;
-    // Show a large fixed area on minimap instead of just node bounds
-    // This gives context of where you are in the full canvas space
-    const mapSize = 3000; // 3000 units in each direction from center
-    return { 
-      minX: -mapSize, 
-      maxX: mapSize, 
-      minY: -mapSize, 
-      maxY: mapSize 
-    };
+    // Show only the area with nodes (with padding)
+    const xs = ns.map((n) => n.x); const ys = ns.map((n) => n.y);
+    const padding = 200;
+    const minX = Math.min(...xs) - padding;
+    const maxX = Math.max(...xs) + padding;
+    const minY = Math.min(...ys) - padding;
+    const maxY = Math.max(...ys) + padding;
+    return { minX, maxX, minY, maxY };
   }, [boardNodes]);
 
   // Fit to screen (content-aware)
@@ -1259,6 +1258,7 @@ export default function MindMapMVP() {
             x={editing.screenPos.sx}
             y={editing.screenPos.sy}
             initial={nodes[editing.id]?.text || ""}
+            zoom={cam.zoom}
             onSubmit={(txt) => { 
               const id = editing.id;
               setEditing(null); 
@@ -1289,7 +1289,7 @@ export default function MindMapMVP() {
             />
             <div className="absolute top-1 right-1 px-2 py-0.5 bg-zinc-900/90 rounded text-[10px] text-zinc-300 font-semibold">
               {Math.round(cam.zoom * 100)}%
-            </div>
+          </div>
           </div>
         )}
 
@@ -1458,7 +1458,7 @@ function PlusHandle({ cx, cy, onClick }: { cx: number; cy: number; onClick: () =
   );
 }
 
-function InlineEditor({ x, y, initial, onSubmit, onCancel }: { x: number; y: number; initial: string; onSubmit: (txt: string) => void; onCancel: () => void; }) {
+function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom = 1 }: { x: number; y: number; initial: string; onSubmit: (txt: string) => void; onCancel: () => void; zoom?: number; }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [val, setVal] = useState(initial);
   const hasSubmitted = useRef(false);
@@ -1487,8 +1487,18 @@ function InlineEditor({ x, y, initial, onSubmit, onCancel }: { x: number; y: num
     }
   };
   
+  // Scale the editor to match zoom level
+  const scaledW = NODE_W * zoom;
+  const scaledH = NODE_H * zoom;
+  
   return (
-    <div className="absolute bg-zinc-800 rounded-xl shadow-lg" style={{ left: x - NODE_W / 2, top: y - NODE_H / 2, width: NODE_W, height: NODE_H }}>
+    <div className="absolute bg-zinc-800 rounded-xl shadow-lg" style={{ 
+      left: x - scaledW / 2, 
+      top: y - scaledH / 2, 
+      width: scaledW, 
+      height: scaledH,
+      transform: `scale(${zoom > 1 ? 1 : zoom})`
+    }}>
       <textarea
         ref={inputRef}
         className="w-full h-full text-sm text-zinc-100 bg-zinc-800 border-2 border-blue-500 rounded-xl px-3 py-2.5 outline-none resize-none leading-snug"
