@@ -3,13 +3,14 @@ import requests
 import time
 import json
 import sys
+import os
 import argparse
 from collections import defaultdict
 from typing import List, Dict
 from sentence_transformers import SentenceTransformer, util
 
-# Optional: put your Semantic Scholar API key here
-API_KEY = None # or None if unauthenticated
+# Get API key from environment variable
+API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY')
 
 # Base URLs for APIs
 BASE_URL = "https://api.semanticscholar.org/graph/v1"
@@ -18,7 +19,11 @@ GRAPH_URL = "https://api.semanticscholar.org/graph/v1/paper/"
 SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 # Add headers if you have an API key
-headers = {"x-api-key": "XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp"}
+headers = {}
+if API_KEY:
+    headers = {"x-api-key": API_KEY}
+else:
+    print("[WARNING] No API key found. Set SEMANTIC_SCHOLAR_API_KEY environment variable for higher rate limits.", file=sys.stderr)
 
 def get_recommendations(paper_id, limit=10, fields=None):
     """

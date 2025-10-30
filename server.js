@@ -29,8 +29,13 @@ app.post('/api/research', async (req, res) => {
   console.log(`[SERVER] Starting research analysis for topic: "${topic}"`);
   
   // Spawn Python process
-  const pythonScript = path.join(__dirname, 'CongApp (1).py');
-  const pythonProcess = spawn('python', [pythonScript, '--topic', topic, '--json']);
+  const pythonScript = path.join(__dirname, 'CongApp.py');
+  const pythonProcess = spawn('python', [pythonScript, '--topic', topic, '--json'], {
+    env: {
+      ...process.env, // Pass all environment variables including SEMANTIC_SCHOLAR_API_KEY
+      PYTHONIOENCODING: 'utf-8' // Ensure proper encoding
+    }
+  });
 
   let stdoutData = '';
   let stderrData = '';

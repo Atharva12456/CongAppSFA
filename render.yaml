@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: congapp-backend
+    env: node
+    plan: free
+    buildCommand: npm install && pip3 install requests sentence-transformers torch
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SEMANTIC_SCHOLAR_API_KEY
+        sync: false  # This will be set manually in Render dashboard
+
