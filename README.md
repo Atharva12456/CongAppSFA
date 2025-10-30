@@ -1,4 +1,4 @@
-# CiteSeaAI
+# CiteSea.AI
 
 A research mind-mapping application that discovers and maps related papers using the Semantic Scholar API.
 
@@ -74,7 +74,7 @@ SEMANTIC_SCHOLAR_API_KEY=your_api_key_here
 - Type your research topic directly into the search bar
 - Press Enter or click "Start →" to create a new mind map
 - Access recent boards from the homepage
-- Click the "CiteSeaAI" logo in the top-right corner to return to homepage
+- Click the "CiteSea.AI" logo in the top-right corner to return to homepage
 
 ### Sidebar
 - Toggle sidebar visibility with the menu button (top-left)

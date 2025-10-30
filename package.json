@@ -1,7 +1,7 @@
 {
   "name": "citeseaai",
   "version": "1.0.0",
-  "description": "CiteSeaAI - Research mind mapping with AI-powered paper discovery",
+  "description": "CiteSea.AI - Research mind mapping with AI-powered paper discovery",
   "type": "module",
   "scripts": {
     "dev": "vite",

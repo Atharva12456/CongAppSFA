@@ -669,7 +669,7 @@ const NODE_W = 220;
 const NODE_H = 84;
 const NODE_RX = 14;
 
-function worldToScreen(x: number, y: number, cam: Camera) { return { sx: x * cam.zoom + cam.x, sy: y * cam.zoom + cam.y }; }
+// worldToScreen function removed - unused
 function screenToWorld(sx: number, sy: number, cam: Camera) { return { x: (sx - cam.x) / cam.zoom, y: (sy - cam.y) / cam.zoom }; }
 
 function diagonalPath(x1: number, y1: number, x2: number, y2: number) {
@@ -740,7 +740,7 @@ export default function MindMapMVP() {
     mode, penColor, penSize, isPanning,
     createBoard, switchBoard, renameBoard, deleteBoard,
     setMode, setCamera,
-    addNode, updateNode, moveNode, deleteNode, addChildrenFromSide,
+    addNode, moveNode, deleteNode, addChildrenFromSide,
     startStroke, addPointToStroke, endStroke, clearPen, eraseStrokeAt,
     load,
   } = useStore();
@@ -1381,13 +1381,13 @@ export default function MindMapMVP() {
           </button>
         </div>
 
-        {/* CiteSeaAI Logo */}
+        {/* CiteSea.AI Logo */}
         <div className="absolute top-4 right-4 z-20">
           <button
             onClick={() => setShowHomepage(true)}
             className="px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-600 rounded-xl text-zinc-100 font-semibold text-sm transition-colors backdrop-blur-sm"
           >
-            CiteSeaAI
+            CiteSea.AI
           </button>
         </div>
 
@@ -1696,7 +1696,7 @@ export default function MindMapMVP() {
       {showHomepage && (
         <div className="flex-1 relative bg-black flex flex-col items-center justify-center gap-8 px-4">
           <div className="text-center max-w-3xl">
-            <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">CiteSeaAI</h1>
+            <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">CiteSea.AI</h1>
             <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
           </div>
           
