@@ -1,12 +1,15 @@
 import math
 import requests
 import time
+import json
+import sys
+import os
 from collections import defaultdict
 from typing import List, Dict
 from sentence_transformers import SentenceTransformer, util
 
-# Optional: put your Semantic Scholar API key here
-API_KEY = None  # or None if unauthenticated
+# Get API key from environment variable
+API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY')
 
 # Base URLs for APIs
 BASE_URL = "https://api.semanticscholar.org/graph/v1"
@@ -15,7 +18,11 @@ GRAPH_URL = "https://api.semanticscholar.org/graph/v1/paper/"
 SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 # Add headers if you have an API key
-headers = {"x-api-key": "XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp"}
+headers = {}
+if API_KEY:
+    headers = {"x-api-key": API_KEY}
+else:
+    print("[WARNING] No API key found. Set SEMANTIC_SCHOLAR_API_KEY environment variable for higher rate limits.", file=sys.stderr)
 
 
 def get_recommendations(paper_id, limit=10, fields=None):
@@ -81,9 +88,9 @@ def search_top_papers(topic, k, recency_weight=0.3, citation_weight=0.2, relevan
         norm_relevance = relevance / max_relevance
 
         total_score = (
-                recency_weight * norm_recency
-                + citation_weight * norm_citations
-                + relevance_weight * norm_relevance
+            recency_weight * norm_recency
+            + citation_weight * norm_citations
+            + relevance_weight * norm_relevance
         )
 
         scored_papers.append({
@@ -177,9 +184,10 @@ def get_recommendations_with_abstract(paper_id: str, limit: int = 20) -> List[Di
     """
     fields = "paperId,title,year,abstract,citationCount,authors,venue,influentialCitationCount"
     try:
-        return get_recommendations(paper_id, limit=limit, fields=fields) or []
+        result = get_recommendations(paper_id, limit=limit, fields=fields)
+        return result if result else []
     except Exception as e:
-        print(f"[WARN] get_recommendations_with_abstract({paper_id}) failed: {e}")
+        print(f"[WARN] get_recommendations_with_abstract failed for paper {paper_id}: {e}", file=sys.stderr)
         return []
 
 
@@ -330,20 +338,112 @@ def _pretty_print_topk(anchor_title, results):
         print(f"   score={p['score']:.4f}  sim={p['similarity']:.4f}  rec={p['recency']:.4f}  cites={p.get('citationCount',0)}")
         print(f"   paperId={p.get('paperId')}")
 
+def is_valid_paper(paper):
+    """
+    Filter out invalid papers (metadata artifacts, incomplete entries, etc.)
+    """
+    title = paper.get("title", "").strip()
+    
+    # Check minimum title length - be more lenient
+    if len(title) < 10:
+        return False
+    
+    # Filter out obvious non-papers (URLs, very specific patterns)
+    invalid_patterns = [
+        "doi:", "http://", "https://", "www.", 
+        "github.com", "arxiv.org"
+    ]
+    title_lower = title.lower()
+    if any(pattern in title_lower for pattern in invalid_patterns):
+        return False
+    
+    # Filter out single word titles
+    if len(title.split()) <= 1:
+        return False
+    
+    # Must have year
+    if not paper.get("year"):
+        return False
+    
+    return True
+
 # Command-line interface for server integration
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Research paper analysis')
     parser.add_argument('--topic', type=str, help='Research topic to analyze')
+    parser.add_argument('--paper-id', type=str, help='Paper ID to find related papers for')
+    parser.add_argument('--title', type=str, help='Title of the paper (optional, for related papers)')
+    parser.add_argument('--abstract', type=str, help='Abstract of the paper (optional, for related papers)')
     parser.add_argument('--json', action='store_true', help='Output results as JSON to stdout')
     args = parser.parse_args()
     
-    # Use provided topic or default
-    topic = args.topic if args.topic else "climate change and urban migration modeling"
-    
     # Start total timer
     total_start = time.time()
+    
+    # MODE 1: Find related papers for a given paper
+    if args.paper_id:
+        print(f"\n[RELATED] Finding related papers for paper ID: {args.paper_id}\n", file=sys.stderr)
+        
+        # Build paper dict
+        paper = {
+            "paperId": args.paper_id,
+            "title": args.title or "",
+            "abstract": args.abstract or ""
+        }
+        
+        # Time the search operation
+        search_start = time.time()
+        related_papers = find_top_papers_for_paper(
+            paper=paper,
+            min_year=2010,
+            max_references=50,
+            max_citations=50,
+            max_similar=20,
+            top_k=2  # Return exactly 2 papers
+        )
+        search_time = time.time() - search_start
+        print(f"[TIME] Related papers search completed in {search_time:.2f} seconds", file=sys.stderr)
+        
+        # Filter valid papers
+        valid_papers = [p for p in related_papers if is_valid_paper(p)]
+        
+        print(f"\n[RESULTS] Found {len(valid_papers)} valid related papers", file=sys.stderr)
+        for i, p in enumerate(valid_papers[:2], 1):
+            print(f"{i}. {p.get('title')} ({p.get('year')}) — Citations: {p.get('citationCount', 0)}", file=sys.stderr)
+        
+        total_time = time.time() - total_start
+        
+        # Output JSON to stdout if requested
+        if args.json:
+            output = {
+                "success": True,
+                "paperId": args.paper_id,
+                "papers": [
+                    {
+                        "title": p.get("title", "Untitled"),
+                        "year": p.get("year", 0),
+                        "citations": p.get("citationCount", 0),
+                        "influentialCitations": p.get("influentialCitationCount", 0),
+                        "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
+                        "paperId": p.get("paperId", "")
+                    }
+                    for p in valid_papers[:2]  # Only return top 2
+                ],
+                "executionTime": round(total_time, 2)
+            }
+            print(json.dumps(output))
+        else:
+            # Manual run - show results in terminal
+            print(f"\n[RELATED] Got {len(valid_papers)} related paper(s).")
+            for idx, p in enumerate(valid_papers[:2], 1):
+                _pretty_print_seed(p, idx)
+    
+    # MODE 2: Find papers by topic (original behavior)
+    else:
+        # Use provided topic or default
+        topic = args.topic if args.topic else "climate change and urban migration modeling"
     
     print(f"\n[SEARCH] Finding seed papers for topic: {topic}\n", file=sys.stderr)
     
@@ -352,7 +452,7 @@ if __name__ == "__main__":
     seed_papers = search_top_papers(topic, k=10)  # Get more papers to have choices after filtering
     search_time = time.time() - search_start
     print(f"[TIME] Search completed in {search_time:.2f} seconds", file=sys.stderr)
-    
+
     # Filter valid papers
     valid_papers = [p for p in seed_papers if is_valid_paper(p)]
     
@@ -374,18 +474,18 @@ if __name__ == "__main__":
                     "citations": p.get("citationCount", 0),
                     "influentialCitations": p.get("influentialCitationCount", 0),
                     "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
-                    "paperId": p.get("paperId", "")
+                        "paperId": p.get("paperId", "")
                 }
-                for p in valid_papers[:4]  # Only return top 4
+                    for p in valid_papers[:4]  # Only return top 4
             ],
             "executionTime": round(total_time, 2)
         }
         print(json.dumps(output))
     else:
-        # Manual run - show results in terminal
-        print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
-        for idx, seed in enumerate(valid_papers[:4], 1):
-            _pretty_print_seed(seed, idx)
+            # Manual run - show results in terminal
+            print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
+            for idx, seed in enumerate(valid_papers[:4], 1):
+                _pretty_print_seed(seed, idx)
 
 """
 if __name__ == "__main__":

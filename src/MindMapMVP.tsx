@@ -80,6 +80,8 @@ type NodeT = {
     authors: string[];
     paperId?: string;
   };
+  // Loading state for async paper fetching
+  isLoading?: boolean;
 };
 
 type EdgeT = {
@@ -400,15 +402,87 @@ const useStore = create<StoreState>((set, get) => ({
     let c1: ID, c2: ID;
     if (side === "right" || side === "left") {
       // fan vertically
-      c1 = get().addNode({ x: baseX, y: baseY - spread, text: "" });
-      c2 = get().addNode({ x: baseX, y: baseY + spread, text: "" });
+      c1 = get().addNode({ x: baseX, y: baseY - spread, text: "", isLoading: !!node.paperData });
+      c2 = get().addNode({ x: baseX, y: baseY + spread, text: "", isLoading: !!node.paperData });
     } else {
       // fan horizontally
-      c1 = get().addNode({ x: baseX - spread, y: baseY, text: "" });
-      c2 = get().addNode({ x: baseX + spread, y: baseY, text: "" });
+      c1 = get().addNode({ x: baseX - spread, y: baseY, text: "", isLoading: !!node.paperData });
+      c2 = get().addNode({ x: baseX + spread, y: baseY, text: "", isLoading: !!node.paperData });
     }
     get().addEdge({ parentNodeId: nodeId, childNodeId: c1 });
     get().addEdge({ parentNodeId: nodeId, childNodeId: c2 });
+    
+    // If parent has paper data, fetch related papers
+    if (node.paperData?.paperId) {
+      const API_URL = window.location.hostname === 'localhost'
+        ? '/api/related-papers'
+        : 'https://citeseaai.onrender.com/api/related-papers';
+      
+      console.log('[FRONTEND] Fetching related papers for:', node.text);
+      
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paperId: node.paperData.paperId,
+          title: node.text,
+          abstract: '' // We don't have abstract stored, but Python can work without it
+        })
+      })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`Backend returned ${response.status}: ${JSON.stringify(data)}`);
+        }
+        return data;
+      })
+      .then(result => {
+        console.log('[FRONTEND] Related papers response:', result);
+        if (result.success && result.papers && result.papers.length >= 2) {
+          const [paper1, paper2] = result.papers;
+          
+          // Update first node
+          get().updateNode(c1, {
+            text: paper1.title || "Related Paper 1",
+            isLoading: false,
+            paperData: {
+              year: paper1.year,
+              citations: paper1.citations,
+              influentialCitations: paper1.influentialCitations || 0,
+              authors: paper1.authors || [],
+              paperId: paper1.paperId
+            }
+          });
+          
+          // Update second node
+          get().updateNode(c2, {
+            text: paper2.title || "Related Paper 2",
+            isLoading: false,
+            paperData: {
+              year: paper2.year,
+              citations: paper2.citations,
+              influentialCitations: paper2.influentialCitations || 0,
+              authors: paper2.authors || [],
+              paperId: paper2.paperId
+            }
+          });
+          
+          console.log('[FRONTEND] Successfully populated related papers');
+        } else {
+          // No papers found, clear loading state
+          get().updateNode(c1, { text: "", isLoading: false });
+          get().updateNode(c2, { text: "", isLoading: false });
+          console.warn('[FRONTEND] No related papers found');
+        }
+      })
+      .catch(error => {
+        console.error('[FRONTEND] Error fetching related papers:', error);
+        // Clear loading state on error
+        get().updateNode(c1, { text: "", isLoading: false });
+        get().updateNode(c2, { text: "", isLoading: false });
+      });
+    }
+    
     return [c1, c2];
   },
 
@@ -1260,13 +1334,13 @@ export default function MindMapMVP() {
           </button>
         </div>
 
-        {/* ResearchRoot Logo */}
+        {/* CiteSeaAI Logo */}
         <div className="absolute top-4 right-4 z-20">
           <button
             onClick={() => setShowHomepage(true)}
             className="px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-600 rounded-xl text-zinc-100 font-semibold text-sm transition-colors backdrop-blur-sm"
           >
-            ResearchRoot
+            CiteSeaAI
           </button>
         </div>
 
@@ -1299,12 +1373,14 @@ export default function MindMapMVP() {
                      }
                    }}
                    onDoubleClick={(e) => onNodeDoubleClick(e, n)}>
-                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill="#18181b" stroke={isEditing ? "#3b82f6" : "#3f3f46"} strokeWidth={isEditing ? 2 : 1.6} />
-                  {/* delete X */}
+                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill={n.isLoading ? "#27272a" : "#18181b"} stroke={isEditing ? "#3b82f6" : "#3f3f46"} strokeWidth={isEditing ? 2 : 1.6} opacity={n.isLoading ? 0.7 : 1} />
+                  {/* delete X (hide while loading) */}
+                  {!n.isLoading && (
                   <g transform={`translate(${NODE_W - 18}, 6)`}>
                     <rect width={12} height={12} rx={3} ry={3} fill="#3f3f46" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); deleteNode(n.id); }} />
                     <path d="M 3 3 L 9 9 M 9 3 L 3 9" stroke="#e4e4e7" strokeWidth={1.4} strokeLinecap="round" pointerEvents="none" />
                   </g>
+                  )}
 
                   {/* Info icon for nodes with paper data */}
                   {n.paperData && (
@@ -1328,15 +1404,28 @@ export default function MindMapMVP() {
 
                   {!isEditing && (
                   <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
-                      <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Double-Click to edit</span>}</div>
+                      {n.isLoading ? (
+                        <div className="flex flex-col items-center justify-center h-full space-y-2">
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                          </div>
+                          <div className="text-xs text-zinc-400 text-center" style={{ fontFamily: "Inter, sans-serif" }}>
+                            Finding related papers...
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Double-Click to edit</span>}</div>
+                      )}
                   </foreignObject>
                   )}
 
-                  {/* Plus handles (per side; disappear once children exist on that side) */}
-                  {showTop && <PlusHandle cx={NODE_W / 2} cy={-8} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'top'); focusNode(c1); }} />}
-                  {showRight && <PlusHandle cx={NODE_W + 8} cy={NODE_H / 2} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'right'); focusNode(c1); }} />}
-                  {showBottom && <PlusHandle cx={NODE_W / 2} cy={NODE_H + 8} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'bottom'); focusNode(c1); }} />}
-                  {showLeft && <PlusHandle cx={-8} cy={NODE_H / 2} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'left'); focusNode(c1); }} />}
+                  {/* Plus handles (per side; disappear once children exist on that side or while loading) */}
+                  {!n.isLoading && showTop && <PlusHandle cx={NODE_W / 2} cy={-8} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'top'); focusNode(c1); }} />}
+                  {!n.isLoading && showRight && <PlusHandle cx={NODE_W + 8} cy={NODE_H / 2} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'right'); focusNode(c1); }} />}
+                  {!n.isLoading && showBottom && <PlusHandle cx={NODE_W / 2} cy={NODE_H + 8} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'bottom'); focusNode(c1); }} />}
+                  {!n.isLoading && showLeft && <PlusHandle cx={-8} cy={NODE_H / 2} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'left'); focusNode(c1); }} />}
                 </g>
               );
             })}
@@ -1560,7 +1649,7 @@ export default function MindMapMVP() {
       {showHomepage && (
         <div className="flex-1 relative bg-black flex flex-col items-center justify-center gap-8 px-4">
           <div className="text-center max-w-3xl">
-            <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">ResearchRoot</h1>
+            <h1 className="text-5xl font-bold mb-4 text-zinc-100 tracking-tight">CiteSeaAI</h1>
             <p className="text-xl text-zinc-400 mb-8">Transform your research into visual mind maps. Start by describing what you want to explore.</p>
           </div>
           

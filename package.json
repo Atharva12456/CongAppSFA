@@ -1,7 +1,7 @@
 {
-  "name": "mind-map-mvp",
+  "name": "citeseaai",
   "version": "1.0.0",
-  "description": "A mind mapping application built with React and TypeScript",
+  "description": "CiteSeaAI - Research mind mapping with AI-powered paper discovery",
   "type": "module",
   "scripts": {
     "dev": "vite",
