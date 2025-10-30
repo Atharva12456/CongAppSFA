@@ -60,6 +60,14 @@ type NodeT = {
   text: string;
   x: number;
   y: number;
+  // Paper metadata (optional)
+  paperData?: {
+    year: number;
+    citations: number;
+    influentialCitations: number;
+    authors: string[];
+    paperId?: string;
+  };
 };
 
 type EdgeT = {
@@ -141,7 +149,7 @@ type StoreState = {
   penSize: StrokeT["size"];
   isPanning: boolean;
   // actions
-  createBoard: (title: string, prompt?: string) => void;
+  createBoard: (title: string, prompt?: string) => Promise<void>;
   switchBoard: (id: ID) => void;
   renameBoard: (id: ID, title: string) => void;
   deleteBoard: (id: ID) => void;
@@ -197,7 +205,7 @@ const useStore = create<StoreState>((set, get) => ({
   penSize: 2,
   isPanning: false,
 
-  createBoard: (title: string, prompt?: string) => {
+  createBoard: async (title: string, prompt?: string) => {
     const id = genId();
     const now = Date.now();
     // Center the origin in the visible viewport (assume 300px sidebar)
@@ -225,9 +233,56 @@ const useStore = create<StoreState>((set, get) => ({
       { x: -r, y: 0 },
       { x: 0, y: -r },
     ];
-    for (const p of pts) {
+    
+    // Try to fetch research papers from backend
+    let papers: any[] = [];
+    try {
+      console.log('[FRONTEND] Calling backend API for topic:', prompt || title);
+      const response = await fetch('/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: prompt || title })
+      });
+      
+      console.log('[FRONTEND] API response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[FRONTEND] API response data:', data);
+        if (data.success && data.papers && data.papers.length > 0) {
+          papers = data.papers;
+          console.log('[FRONTEND] Got papers:', papers);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('[FRONTEND] API error:', response.status, errorText);
+        throw new Error(`Backend returned ${response.status}: ${errorText}`);
+      }
+    } catch (error) {
+      console.error('[FRONTEND] Failed to fetch research papers:', error);
+      throw error; // Re-throw to be caught by createBoardWithLoading
+    }
+    
+    // Create 4 child nodes with paper titles and metadata
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
       const nid = genId();
-      nodes[nid] = { id: nid, boardId: id, text: "", x: p.x, y: p.y };
+      const paper = papers[i];
+      
+      nodes[nid] = { 
+        id: nid, 
+        boardId: id, 
+        text: paper?.title || "", 
+        x: p.x, 
+        y: p.y,
+        paperData: paper ? {
+          year: paper.year,
+          citations: paper.citations,
+          influentialCitations: paper.influentialCitations || 0,
+          authors: paper.authors || [],
+          paperId: paper.paperId
+        } : undefined
+      };
       const eid = genId();
       edges[eid] = { id: eid, boardId: id, parentNodeId: centerId, childNodeId: nid };
     }
@@ -547,6 +602,11 @@ export default function MindMapMVP() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ id: ID; title: string } | null>(null);
   const [showRenameBoard, setShowRenameBoard] = useState<{ id: ID; title: string } | null>(null);
   const [renameBoardTitle, setRenameBoardTitle] = useState("");
+  const [isLoadingResearch, setIsLoadingResearch] = useState(false);
+  const [showPaperInfo, setShowPaperInfo] = useState<{
+    nodeId: ID;
+    position: 'left' | 'right' | 'top' | 'bottom';
+  } | null>(null);
   
   // Homepage state (show by default if no boards)
   const [showHomepage, setShowHomepage] = useState(() => boardOrder.length === 0);
@@ -556,6 +616,25 @@ export default function MindMapMVP() {
   
   // viewport size (for minimap + fit)
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
+  
+  // Helper function to create board with loading state
+  const createBoardWithLoading = async (title: string, prompt?: string) => {
+    setIsLoadingResearch(true);
+    try {
+      await createBoard(title, prompt);
+      setShowHomepage(false);
+    } catch (error: any) {
+      console.error('Error creating board:', error);
+      const errorMessage = error.message || 'Unknown error';
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        alert('❌ Backend server is not running!\n\nPlease start the backend server:\n1. Open a terminal\n2. Run: npm run server\n\nOr run both servers together with: npm run dev:full');
+      } else {
+        alert(`❌ Failed to create board:\n${errorMessage}\n\nCheck the browser console for details.`);
+      }
+    } finally {
+      setIsLoadingResearch(false);
+    }
+  };
   useEffect(() => {
     const update = () => {
       if (!containerRef.current) return;
@@ -1215,6 +1294,26 @@ export default function MindMapMVP() {
                     <path d="M 3 3 L 9 9 M 9 3 L 3 9" stroke="#e4e4e7" strokeWidth={1.4} strokeLinecap="round" pointerEvents="none" />
                   </g>
 
+                  {/* Info icon for nodes with paper data */}
+                  {n.paperData && (
+                    <InfoIcon
+                      cx={NODE_W - 34}
+                      cy={6}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Determine position based on node coordinates
+                        const horizontal = Math.abs(n.x) >= Math.abs(n.y);
+                        let position: 'left' | 'right' | 'top' | 'bottom';
+                        if (horizontal) {
+                          position = n.x > 0 ? 'right' : 'left';
+                        } else {
+                          position = n.y > 0 ? 'bottom' : 'top';
+                        }
+                        setShowPaperInfo({ nodeId: n.id, position });
+                      }}
+                    />
+                  )}
+
                   {!isEditing && (
                   <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
                       <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Double-Click to edit</span>}</div>
@@ -1229,6 +1328,29 @@ export default function MindMapMVP() {
                 </g>
               );
             })}
+
+            {/* Paper Info Popover - rendered in world space */}
+            {showPaperInfo && nodes[showPaperInfo.nodeId]?.paperData && (
+              <>
+                {/* Click-away overlay - large rect to catch clicks */}
+                <rect
+                  x={-100000}
+                  y={-100000}
+                  width={200000}
+                  height={200000}
+                  fill="transparent"
+                  onClick={() => setShowPaperInfo(null)}
+                  style={{ cursor: 'default' }}
+                />
+                <PaperInfoPopover
+                  paperData={nodes[showPaperInfo.nodeId].paperData}
+                  nodeX={nodes[showPaperInfo.nodeId].x - NODE_W / 2}
+                  nodeY={nodes[showPaperInfo.nodeId].y - NODE_H / 2}
+                  nodePosition={showPaperInfo.position}
+                  onClose={() => setShowPaperInfo(null)}
+                />
+              </>
+            )}
           </g>
         </svg>
         )}
@@ -1351,13 +1473,13 @@ export default function MindMapMVP() {
                 value={newPromptTitle}
                 onChange={(e) => setNewPromptTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { const t = newPromptTitle.trim() || 'Untitled'; createBoard(t, t); setShowNewPrompt(false); setNewPromptTitle(""); }
+                  if (e.key === 'Enter') { const t = newPromptTitle.trim() || 'Untitled'; createBoardWithLoading(t, t); setShowNewPrompt(false); setNewPromptTitle(""); }
                   if (e.key === 'Escape') setShowNewPrompt(false);
                 }}
               />
               <div className="mt-3 flex justify-end gap-2 text-sm">
                 <button className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700" onClick={() => setShowNewPrompt(false)}>Cancel</button>
-                <button className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700" onClick={() => { const t = newPromptTitle.trim() || 'Untitled'; createBoard(t, t); setShowNewPrompt(false); setNewPromptTitle(""); }}>Create</button>
+                <button className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700" onClick={() => { const t = newPromptTitle.trim() || 'Untitled'; createBoardWithLoading(t, t); setShowNewPrompt(false); setNewPromptTitle(""); }}>Create</button>
               </div>
             </div>
           </div>
@@ -1442,8 +1564,7 @@ export default function MindMapMVP() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newPromptTitle.trim()) {
                     const title = newPromptTitle.trim();
-                    createBoard(title, title);
-                    setShowHomepage(false);
+                    createBoardWithLoading(title, title);
                     setNewPromptTitle("");
                   }
                 }}
@@ -1453,8 +1574,7 @@ export default function MindMapMVP() {
                 onClick={() => {
                   if (newPromptTitle.trim()) {
                     const title = newPromptTitle.trim();
-                    createBoard(title, title);
-                    setShowHomepage(false);
+                    createBoardWithLoading(title, title);
                     setNewPromptTitle("");
                   }
                 }}
@@ -1490,6 +1610,25 @@ export default function MindMapMVP() {
           )}
         </div>
       )}
+      
+      {/* Loading Modal for Research Analysis */}
+      {isLoadingResearch && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-8 w-[500px] text-center">
+            <div className="mb-4">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-zinc-700 border-t-blue-500"></div>
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Analyzing Research Papers...</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              We're searching academic databases and analyzing citation networks to find the most relevant papers for your topic.
+            </p>
+            <p className="text-zinc-500 text-xs">
+              This may take 1-3 minutes. Please wait...
+            </p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -1499,6 +1638,167 @@ function PlusHandle({ cx, cy, onClick }: { cx: number; cy: number; onClick: () =
     <g transform={`translate(${cx - 12},${cy - 12})`}>
       <rect width={24} height={24} rx={7} ry={7} fill="#1f2937" stroke="#374151" onClick={(e) => { e.stopPropagation(); onClick(); }} />
       <path d="M 12 5 L 12 19 M 5 12 L 19 12" stroke="#a3a3a3" strokeWidth={1.8} strokeLinecap="round" pointerEvents="none" />
+    </g>
+  );
+}
+
+function InfoIcon({ 
+  cx, cy, onClick 
+}: { 
+  cx: number; 
+  cy: number; 
+  onClick: (e: React.MouseEvent) => void 
+}) {
+  return (
+    <g transform={`translate(${cx},${cy})`}>
+      <rect 
+        width={12} 
+        height={12} 
+        rx={3} 
+        ry={3} 
+        fill="#3b82f6" 
+        className="cursor-pointer transition-colors hover:fill-blue-500"
+        onClick={onClick}
+      />
+      <text 
+        x={6} 
+        y={6} 
+        textAnchor="middle" 
+        dominantBaseline="central" 
+        fill="white" 
+        fontSize={9} 
+        fontWeight="bold"
+        pointerEvents="none"
+      >
+        i
+      </text>
+    </g>
+  );
+}
+
+function PaperInfoPopover({
+  paperData,
+  nodeX,
+  nodeY,
+  nodePosition,
+  onClose
+}: {
+  paperData: NodeT['paperData'];
+  nodeX: number;
+  nodeY: number;
+  nodePosition: 'left' | 'right' | 'top' | 'bottom';
+  onClose: () => void;
+}) {
+  if (!paperData) return null;
+  
+  const authorDisplay = paperData.authors.length === 0
+    ? 'No authors listed'
+    : paperData.authors.length <= 3
+    ? paperData.authors.join(', ')
+    : `${paperData.authors.slice(0, 3).join(', ')}...and ${paperData.authors.length - 3} more`;
+  
+  // Calculate position in world coordinates
+  const NODE_W = 220;
+  const popoverWidth = 280; // Width in world coordinates
+  const popoverHeight = 140; // Height in world coordinates
+  const offset = 20; // Space between node and popover in world coordinates
+  
+  let popoverX = nodeX;
+  let popoverY = nodeY;
+  
+  switch (nodePosition) {
+    case 'left':
+      // Position to the left of the node
+      popoverX = nodeX - popoverWidth - offset;
+      popoverY = nodeY;
+      break;
+    case 'right':
+      // Position to the right of the node
+      popoverX = nodeX + NODE_W + offset;
+      popoverY = nodeY;
+      break;
+    case 'top':
+    case 'bottom':
+    default:
+      // Position to the right for top/bottom
+      popoverX = nodeX + NODE_W + offset;
+      popoverY = nodeY;
+      break;
+  }
+  
+  return (
+    <g>
+      {/* Popover box */}
+      <rect
+        x={popoverX}
+        y={popoverY}
+        width={popoverWidth}
+        height={popoverHeight}
+        rx={12}
+        ry={12}
+        fill="#27272a"
+        stroke="#3b82f6"
+        strokeWidth={2}
+        filter="drop-shadow(0 10px 25px rgba(0,0,0,0.5))"
+      />
+      
+      {/* Close button */}
+      <g 
+        transform={`translate(${popoverX + popoverWidth - 26}, ${popoverY + 8})`}
+        onClick={onClose}
+        className="cursor-pointer"
+        style={{ cursor: 'pointer' }}
+      >
+        <circle cx={10} cy={10} r={10} fill="#3f3f46" className="hover:fill-zinc-600" />
+        <text
+          x={10}
+          y={10}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#e4e4e7"
+          fontSize={16}
+          fontWeight="bold"
+        >
+          ×
+        </text>
+      </g>
+      
+      {/* Content */}
+      <foreignObject 
+        x={popoverX + 12} 
+        y={popoverY + 12} 
+        width={popoverWidth - 24} 
+        height={popoverHeight - 24}
+      >
+        <div className="space-y-2 text-sm" style={{ fontFamily: "Inter, sans-serif" }}>
+          <div>
+            <span className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">
+              Publication Year:{' '}
+            </span>
+            <span className="text-zinc-100 font-medium text-xs">
+              {paperData.year || 'Unknown'}
+            </span>
+          </div>
+          
+          <div>
+            <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wide mb-1">
+              Authors
+            </div>
+            <div className="text-zinc-100 text-xs leading-relaxed">
+              {authorDisplay}
+            </div>
+          </div>
+          
+          <div>
+            <span className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">
+              Highly Influential Citations:{' '}
+            </span>
+            <span className="text-zinc-100 font-medium text-xs">
+              {paperData.influentialCitations?.toLocaleString() || 0}
+            </span>
+          </div>
+        </div>
+      </foreignObject>
     </g>
   );
 }
