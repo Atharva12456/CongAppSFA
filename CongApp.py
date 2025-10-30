@@ -5,11 +5,13 @@ import json
 import sys
 import os
 
-# Read API key from environment variable (fallback to hardcoded for local testing)
-API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY') or 'XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp'
+# Read API key strictly from environment variable
+API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY')
 
-# Set up headers with API key
-headers = {"x-api-key": API_KEY}
+# Set up headers only if API key is present
+headers = {"x-api-key": API_KEY} if API_KEY else {}
+if not API_KEY:
+    print("[WARN] SEMANTIC_SCHOLAR_API_KEY is not set; API requests may fail.", file=sys.stderr)
 
 BASE = "https://api.semanticscholar.org/graph/v1"
 
@@ -121,7 +123,7 @@ def get_paper_references(paper_id: str, limit: int = 50):
         else:
             r.raise_for_status()
     except Exception as e:
-        print(f"[WARN] get_paper_references({paper_id}) failed: {e}")
+        print(f"[WARN] get_paper_references({paper_id}) failed: {e}", file=sys.stderr)
     return []
 
 
@@ -162,7 +164,7 @@ def get_paper_citations(paper_id: str, limit: int = 50):
         else:
             r.raise_for_status()
     except Exception as e:
-        print(f"[WARN] get_paper_citations({paper_id}) failed: {e}")
+        print(f"[WARN] get_paper_citations({paper_id}) failed: {e}", file=sys.stderr)
     return []
 
 
@@ -234,17 +236,30 @@ def find_top_papers_for_paper(
             candidates[cid] = dict(cit)
 
     # Semantic Scholar's recommendations (similar papers)
-    for s in get_recommendations_with_abstract(paper_id, limit=max_similar):
-        sid2 = s.get("paperId")
-        if not sid2: continue
-        y = s.get("year") or 0
-        if y and y < min_year: continue
-        if sid2 not in candidates:
-            candidates[sid2] = dict(s)
+    if max_similar and max_similar > 0:
+        for s in get_recommendations_with_abstract(paper_id, limit=max_similar):
+            sid2 = s.get("paperId")
+            if not sid2:
+                continue
+            y = s.get("year") or 0
+            if y and y < min_year:
+                continue
+            if sid2 not in candidates:
+                candidates[sid2] = dict(s)
 
     if not candidates:
-        print("[INFO] No connected papers found after filtering.")
-        return []
+        print("[INFO] No connected papers found after filtering.", file=sys.stderr)
+        # Fallback: keyword search using the paper's title and abstract
+        query_title = paper.get("title") or ""
+        query_abstract = paper.get("abstract") or ""
+        query_text = (query_title + " " + query_abstract).strip() or query_title
+        seeds = search_top_papers(query_text, k=top_k * 2)
+        for s in seeds:
+            sid = s.get("paperId")
+            if sid and sid not in candidates:
+                candidates[sid] = dict(s)
+        if not candidates:
+            return []
 
     # Build query = anchor paper's title + abstract
     query_title = paper.get("title") or ""
@@ -336,8 +351,8 @@ def is_valid_paper(paper):
     """
     title = paper.get("title", "").strip()
     
-    # Check minimum title length - be more lenient
-    if len(title) < 10:
+    # Check minimum title length - more lenient to allow shorter valid titles
+    if len(title) < 5:
         return False
     
     # Filter out obvious non-papers (URLs, very specific patterns)
@@ -353,9 +368,8 @@ def is_valid_paper(paper):
     if len(title.split()) <= 1:
         return False
     
-    # Must have year
-    if not paper.get("year"):
-        return False
+    # Year is optional; many API records omit it
+    # if not paper.get("year"): return False
     
     return True
 
@@ -397,29 +411,52 @@ if __name__ == "__main__":
         
         # Time the search operation
         search_start = time.time()
-        # Fetch more papers if we're excluding some (to ensure we get 2 after filtering)
-        fetch_count = max(10, 2 + len(exclude_ids)) if exclude_ids else 2
-        related_papers = find_top_papers_for_paper(
-            paper=paper,
-            min_year=2010,
-            max_references=50,
-            max_citations=50,
-            max_similar=20,
-            top_k=fetch_count  # Fetch extra to account for filtering
-        )
+
+        # Keep fetching more related papers until we have at least 2 valid ones
+        valid_papers = []
+        fetch_count = max(10, 2 + len(exclude_ids)) if exclude_ids else 10
+        max_fetch = 300  # Try up to 300 papers
+        
+        seen_ids = set(exclude_ids) if exclude_ids else set()
+        accumulated: List[Dict] = []
+        while len(valid_papers) < 2 and fetch_count <= max_fetch:
+            print(f"[SEARCH] Fetching top {fetch_count} related papers...", file=sys.stderr)
+            related_papers = find_top_papers_for_paper(
+                paper=paper,
+                min_year=2000,         # relax recency
+                max_references=100,    # fetch more references
+                max_citations=100,     # fetch more citations
+                max_similar=0,
+                top_k=fetch_count
+            )
+            
+            # Accumulate and deduplicate across attempts
+            for p in related_papers:
+                pid = p.get('paperId')
+                if not pid or pid in seen_ids:
+                    continue
+                accumulated.append(p)
+                seen_ids.add(pid)
+
+            # Filter valid papers from accumulated pool
+            valid_papers = [p for p in accumulated if is_valid_paper(p)]
+            
+            # Filter out excluded paper IDs (to avoid duplicates)
+            if exclude_ids:
+                before_count = len(valid_papers)
+                valid_papers = [p for p in valid_papers if p.get('paperId') not in exclude_ids]
+                filtered_count = before_count - len(valid_papers)
+                if filtered_count > 0:
+                    print(f"[INFO] Filtered out {filtered_count} duplicate papers", file=sys.stderr)
+            
+            if len(valid_papers) < 2 and fetch_count < max_fetch:
+                print(f"[SEARCH] Only found {len(valid_papers)} valid papers, increasing search...", file=sys.stderr)
+                fetch_count = min(fetch_count + 50, max_fetch)  # Increase by 50 each time
+            else:
+                break
+        
         search_time = time.time() - search_start
         print(f"[TIME] Related papers search completed in {search_time:.2f} seconds", file=sys.stderr)
-        
-        # Filter valid papers
-        valid_papers = [p for p in related_papers if is_valid_paper(p)]
-        
-        # Filter out excluded paper IDs (to avoid duplicates)
-        if exclude_ids:
-            before_count = len(valid_papers)
-            valid_papers = [p for p in valid_papers if p.get('paperId') not in exclude_ids]
-            filtered_count = before_count - len(valid_papers)
-            if filtered_count > 0:
-                print(f"[INFO] Filtered out {filtered_count} duplicate papers", file=sys.stderr)
         
         print(f"\n[RESULTS] Found {len(valid_papers)} valid related papers", file=sys.stderr)
         for i, p in enumerate(valid_papers[:2], 1):
@@ -458,8 +495,8 @@ if __name__ == "__main__":
         topic = args.topic if args.topic else "climate change and urban migration modeling"
     
         print(f"\n[SEARCH] Finding seed papers for topic: {topic}\n", file=sys.stderr)
-        
-        # Time the search operation
+    
+    # Time the search operation
         search_start = time.time()
         
         # Keep fetching more papers until we have at least 4 valid ones
@@ -478,39 +515,40 @@ if __name__ == "__main__":
             else:
                 break
         
-    search_time = time.time() - search_start
-    print(f"[TIME] Search completed in {search_time:.2f} seconds", file=sys.stderr)
+        search_time = time.time() - search_start
+        print(f"[TIME] Search completed in {search_time:.2f} seconds", file=sys.stderr)
 
-    print(f"\n[RESULTS] Found {len(valid_papers)} valid papers (showing top 4)", file=sys.stderr)
-    for i, p in enumerate(valid_papers[:4], 1):
-       print(f"{i}. {p.get('title')} ({p.get('year')}) — Citations: {p.get('citationCount', 0)}", file=sys.stderr)
-        
+        print(f"\n[RESULTS] Found {len(valid_papers)} valid papers (showing top 4)", file=sys.stderr)
+        for i, p in enumerate(valid_papers[:4], 1):
+            print(f"{i}. {p.get('title')} ({p.get('year')}) — Citations: {p.get('citationCount', 0)}", file=sys.stderr)
+            
         total_time = time.time() - total_start
         
         # Output JSON to stdout if requested
         if args.json:
-        output = {
-            "success": True,
-            "topic": topic,
-            "papers": [
-                {
-                    "title": p.get("title", "Untitled"),
-                    "year": p.get("year", 0),
-                    "citations": p.get("citationCount", 0),
-                    "influentialCitations": p.get("influentialCitationCount", 0),
-                    "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
-                        "paperId": p.get("paperId", "")
-                }
-                    for p in valid_papers[:4]  # Return top 4
-            ],
-            "executionTime": round(total_time, 2)
-        }
-        print(json.dumps(output))
+            output = {
+                "success": True,
+                "topic": topic,
+                "papers": [
+                    {
+                        "title": p.get("title", "Untitled"),
+                        "year": p.get("year", 0),
+                        "citations": p.get("citationCount", 0),
+                        "influentialCitations": p.get("influentialCitationCount", 0),
+                        "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
+                            "paperId": p.get("paperId", "")
+                    }
+                        for p in valid_papers[:4]  # Return top 4
+                ],
+                "executionTime": round(total_time, 2)
+            }
+            print(json.dumps(output))
+
         else:
-            # Manual run - show results in terminal
-            print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
-            for idx, seed in enumerate(valid_papers[:4], 1):
-                _pretty_print_seed(seed, idx)
+                # Manual run - show results in terminal
+                print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
+                for idx, seed in enumerate(valid_papers[:4], 1):
+                    _pretty_print_seed(seed, idx)
 """
 if __name__ == "__main__":
     # Start total timer

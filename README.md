@@ -1,6 +1,6 @@
-# Mind Map MVP
+# CiteSeaAI
 
-A powerful mind mapping application built with React, TypeScript, and modern web technologies.
+A research mind-mapping application that discovers and maps related papers using the Semantic Scholar API.
 
 ## Features
 
@@ -39,9 +39,23 @@ A powerful mind mapping application built with React, TypeScript, and modern web
 npm install
 ```
 
-2. Start the development server:
+2. Create an env file:
 ```bash
-npm run dev
+cp .env.example .env
+# then edit .env to add your Semantic Scholar API key
+```
+
+3. Start the development server:
+```bash
+npm run dev:full
+### Environment Variables
+
+Create `.env` with:
+
+```
+SEMANTIC_SCHOLAR_API_KEY=your_api_key_here
+```
+
 ```
 
 3. Open your browser and navigate to `http://localhost:3000`

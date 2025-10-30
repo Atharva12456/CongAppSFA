@@ -502,18 +502,34 @@ const useStore = create<StoreState>((set, get) => ({
           });
           
           console.log('[FRONTEND] Successfully populated related papers');
+        } else if (result.success && result.papers && result.papers.length === 1) {
+          // Only 1 paper found, populate first node and show message in second
+          const paper1 = result.papers[0];
+          get().updateNode(c1, {
+            text: paper1.title || "Related Paper",
+            isLoading: false,
+            paperData: {
+              year: paper1.year,
+              citations: paper1.citations,
+              influentialCitations: paper1.influentialCitations || 0,
+              authors: paper1.authors || [],
+              paperId: paper1.paperId
+            }
+          });
+          get().updateNode(c2, { text: "No papers found", isLoading: false });
+          console.warn('[FRONTEND] Only 1 related paper found');
         } else {
-          // No papers found, clear loading state
-          get().updateNode(c1, { text: "", isLoading: false });
-          get().updateNode(c2, { text: "", isLoading: false });
-          console.warn('[FRONTEND] No related papers found');
+          // No papers found after searching up to 300
+          get().updateNode(c1, { text: "No relevant papers found", isLoading: false });
+          get().updateNode(c2, { text: "No relevant papers found", isLoading: false });
+          console.warn('[FRONTEND] No related papers found after extensive search');
         }
       })
       .catch(error => {
         console.error('[FRONTEND] Error fetching related papers:', error);
-        // Clear loading state on error
-        get().updateNode(c1, { text: "", isLoading: false });
-        get().updateNode(c2, { text: "", isLoading: false });
+        // Show error message in nodes
+        get().updateNode(c1, { text: "Error loading papers", isLoading: false });
+        get().updateNode(c2, { text: "Error loading papers", isLoading: false });
       });
     }
     
@@ -1083,29 +1099,13 @@ export default function MindMapMVP() {
   }, [onWheel]);
   useEvent("keyup", (e: KeyboardEvent) => { if (e.code === "Space") useStore.getState().setPanning(false); });
 
-  // Editor overlay for node text
-  const [editing, setEditing] = useState<{ id: ID; screenPos: { sx: number; sy: number } } | null>(null);
+  // Nodes are no longer editable
   const focusNode = (id: ID) => {
-    // Clear any existing editing first to prevent text duplication
-    setEditing(null);
-    // Use setTimeout to ensure the previous editor has submitted
-    setTimeout(() => {
+    // Focusing a node no longer triggers editing
     const n = useStore.getState().nodes[id];
     if (!n) return;
-    const { sx, sy } = worldToScreen(n.x, n.y, cam);
-    setEditing({ id, screenPos: { sx, sy } });
-    }, 0);
+    // Just ensure the node is visible (could add viewport centering here if needed)
   };
-  const onNodeDoubleClick = (e: React.MouseEvent, n: NodeT) => { 
-    e.stopPropagation(); 
-    setEditing(null); // Clear first
-    setTimeout(() => {
-      const { sx, sy } = worldToScreen(n.x, n.y, cam); 
-      setEditing({ id: n.id, screenPos: { sx, sy } });
-    }, 0);
-  };
-  useEffect(() => { if (!editing) return; const n = useStore.getState().nodes[editing.id]; if (!n) { setEditing(null); return; } setEditing({ id: editing.id, screenPos: worldToScreen(n.x, n.y, cam) }); }, [cam, editing]);
-
   // Right-click context
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; world?: { x: number; y: number } } | null>(null);
   const onContextMenu = (e: React.MouseEvent) => {
@@ -1328,16 +1328,9 @@ export default function MindMapMVP() {
         onContextMenu={onContextMenu}
         onMouseDown={(e) => {
           onMouseDownCanvas(e);
-          // Close editor when clicking on canvas (not on nodes)
-          if (editing && e.target === e.currentTarget) {
-            setEditing(null);
-          }
         }}
-        onClick={(e) => {
-          // Also handle via click for better reliability
-          if (editing && (e.target === canvasRef.current || e.target === svgRef.current || e.target === containerRef.current)) {
-            setEditing(null);
-          }
+        onClick={() => {
+          // Click handler (editing disabled)
         }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -1395,19 +1388,10 @@ export default function MindMapMVP() {
               const showRight = !hasChildOnSide(n, 'right', nodes, edges) && connectedSide !== 'right';
               const showBottom = !hasChildOnSide(n, 'bottom', nodes, edges) && connectedSide !== 'bottom';
               const showLeft = !hasChildOnSide(n, 'left', nodes, edges) && connectedSide !== 'left';
-              const isEditing = editing?.id === n.id;
               return (
                 <g key={n.id} transform={`translate(${x},${y})`} 
-                   onMouseDown={(e) => onNodeMouseDown(e, n.id)} 
-                   onClick={(e) => {
-                     // If editing a different node, exit edit mode first
-                     if (editing && editing.id !== n.id) {
-                       e.stopPropagation();
-                       setEditing(null);
-                     }
-                   }}
-                   onDoubleClick={(e) => onNodeDoubleClick(e, n)}>
-                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill={n.isLoading ? "#1e3a8a" : "#18181b"} stroke={n.isLoading ? "#3b82f6" : (isEditing ? "#3b82f6" : "#3f3f46")} strokeWidth={n.isLoading ? 2 : (isEditing ? 2 : 1.6)} opacity={1} />
+                   onMouseDown={(e) => onNodeMouseDown(e, n.id)}>
+                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill={n.isLoading ? "#1e3a8a" : "#18181b"} stroke={n.isLoading ? "#3b82f6" : "#3f3f46"} strokeWidth={n.isLoading ? 2 : 1.6} opacity={1} />
                   {/* delete X (hide while loading) */}
                   {!n.isLoading && (
                   <g transform={`translate(${NODE_W - 18}, 6)`}>
@@ -1436,8 +1420,7 @@ export default function MindMapMVP() {
                     />
                   )}
 
-                  {!isEditing && (
-                  <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
+                  <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents={n.paperData ? "auto" : "none"}>
                       {n.isLoading ? (
                         <div className="flex flex-col items-center justify-center h-full space-y-3 px-3">
                           <div className="flex space-x-1.5">
@@ -1449,11 +1432,35 @@ export default function MindMapMVP() {
                             Finding related papers...
                           </div>
                         </div>
+                      ) : n.text === "No papers found" || n.text === "No relevant papers found" || n.text === "Error loading papers" ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className={`text-xs text-center font-medium italic ${n.text === "Error loading papers" ? "text-orange-400" : "text-red-400"}`} style={{ fontFamily: "Inter, sans-serif" }}>
+                            {n.text}
+                          </div>
+                        </div>
+                      ) : n.paperData?.paperId ? (
+                        <a 
+                          href={`https://www.semanticscholar.org/paper/${n.paperData.paperId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm leading-snug text-blue-400 hover:text-blue-300 underline break-words cursor-pointer block"
+                          style={{ 
+                            fontFamily: "Inter, sans-serif", 
+                            overflow: "hidden", 
+                            textOverflow: "ellipsis", 
+                            display: "-webkit-box", 
+                            WebkitLineClamp: 3 as any, 
+                            WebkitBoxOrient: "vertical" as any, 
+                            wordBreak: "break-word" 
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {n.text}
+                        </a>
                       ) : (
-                        <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Double-Click to edit</span>}</div>
+                        <div className="text-sm leading-snug text-zinc-200 break-words" style={{ fontFamily: "Inter, sans-serif", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 3 as any, WebkitBoxOrient: "vertical" as any, wordBreak: "break-word" }}>{n.text || <span className="text-zinc-500 italic">Empty node</span>}</div>
                       )}
                   </foreignObject>
-                  )}
 
                   {/* Plus handles (per side; disappear once children exist on that side or while loading) */}
                   {!n.isLoading && showTop && <PlusHandle cx={NODE_W / 2} cy={-8} onClick={() => { const [c1] = addChildrenFromSide(n.id, 'top'); focusNode(c1); }} />}
@@ -1553,21 +1560,7 @@ export default function MindMapMVP() {
         />
         )}
 
-        {/* Inline editor */}
-        {editing && hasBoards && (
-          <InlineEditor
-            x={editing.screenPos.sx}
-            y={editing.screenPos.sy}
-            initial={nodes[editing.id]?.text || ""}
-            zoom={cam.zoom}
-            onSubmit={(txt) => { 
-              const id = editing.id;
-              setEditing(null); 
-              updateNode(id, { text: txt });
-            }}
-            onCancel={() => setEditing(null)}
-          />
-        )}
+        {/* Inline editor removed - nodes are no longer editable */}
 
         {/* Context menu */}
         {hasBoards && contextMenu && (
@@ -1938,82 +1931,7 @@ function PaperInfoPopover({
   );
 }
 
-function InlineEditor({ x, y, initial, onSubmit, onCancel, zoom }: { x: number; y: number; initial: string; onSubmit: (txt: string) => void; onCancel: () => void; zoom: number; }) {
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [val, setVal] = useState(initial);
-  const hasSubmitted = useRef(false);
-  
-  // Reset val when initial changes (switching nodes)
-  useEffect(() => {
-    setVal(initial);
-  }, [initial]);
-  
-  useEffect(() => { 
-    inputRef.current?.focus(); 
-    inputRef.current?.select(); 
-  }, []);
-  
-  const handleSubmit = () => {
-    if (!hasSubmitted.current) {
-      hasSubmitted.current = true;
-      // Don't trim - allow multiple words and preserve spaces
-      onSubmit(val);
-    }
-  };
-  
-  const handleCancel = () => {
-    if (!hasSubmitted.current) {
-      hasSubmitted.current = true;
-      onCancel();
-    }
-  };
-  
-  // Scale editor to match zoom
-  // Position using base size, then scale from center
-  return (
-    <div 
-      className="absolute bg-zinc-800 rounded-xl shadow-lg" 
-      style={{ 
-        left: x - NODE_W / 2,  // Center on node position
-        top: y - NODE_H / 2,   // Center on node position
-        width: NODE_W,  // Always base size
-        height: NODE_H,  // Always base size
-        transform: `scale(${zoom})`,
-        transformOrigin: 'center center'
-      }}
-    >
-      <textarea
-        ref={inputRef}
-        className="w-full h-full text-zinc-100 bg-zinc-800 border-2 border-blue-500 rounded-xl px-3 py-2.5 outline-none resize-none leading-snug overflow-hidden"
-        style={{ 
-          fontFamily: "Inter, sans-serif",
-          fontSize: '13px',  // Fixed pixel size, scales naturally with container zoom
-          scrollbarWidth: 'none',  // Hide scrollbar for Firefox
-          msOverflowStyle: 'none',  // Hide scrollbar for IE/Edge
-        }}
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-        onKeyDown={(e) => { 
-          if (e.key === "Enter" && !e.shiftKey) { 
-            e.preventDefault(); 
-            handleSubmit();
-          } 
-          if (e.key === "Escape") {
-            e.preventDefault();
-            handleCancel();
-          }
-        }}
-        onBlur={handleSubmit}
-        placeholder="Type here..."
-      />
-      <style>{`
-        textarea::-webkit-scrollbar {
-          display: none; /* Hide scrollbar for Chrome, Safari */
-        }
-      `}</style>
-    </div>
-  );
-}
+// InlineEditor component removed - nodes are no longer editable
 
 function BoardTab({ board, active, onClick, onRenameClick, onDeleteClick }: { board: Board; active: boolean; onClick: () => void; onRenameClick: () => void; onDeleteClick: () => void; }) {
   return (
