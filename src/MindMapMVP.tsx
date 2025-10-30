@@ -3,6 +3,18 @@ import localforage from "localforage";
 import { create } from "zustand";
 
 // =====================================================
+// Backend API Configuration
+// =====================================================
+
+// IMPORTANT: Update this URL with your Render backend URL after deployment
+// For local development, use '/api/research' (proxies to localhost:5000 via vite.config.ts)
+// For production (GitHub Pages), use your Render backend URL
+const IS_PRODUCTION = window.location.hostname !== 'localhost';
+const API_URL = IS_PRODUCTION
+  ? 'https://citeseaai.onrender.com/api/research'
+  : '/api/research';
+
+// =====================================================
 // Device Fingerprinting
 // =====================================================
 
@@ -238,7 +250,7 @@ const useStore = create<StoreState>((set, get) => ({
     let papers: any[] = [];
     try {
       console.log('[FRONTEND] Calling backend API for topic:', prompt || title);
-      const response = await fetch('/api/research', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: prompt || title })
