@@ -355,7 +355,15 @@ const useStore = create<StoreState>((set, get) => ({
   addNode: (n: Partial<NodeT>) => {
     const id = genId();
     const boardId = get().currentBoardId!;
-    const node: NodeT = { id, boardId, text: n.text ?? "", x: n.x ?? 0, y: n.y ?? 0 };
+    const node: NodeT = { 
+      id, 
+      boardId, 
+      text: n.text ?? "", 
+      x: n.x ?? 0, 
+      y: n.y ?? 0,
+      ...(n.paperData && { paperData: n.paperData }),
+      ...(n.isLoading !== undefined && { isLoading: n.isLoading })
+    };
     set((s) => ({ nodes: { ...s.nodes, [id]: node } }));
     get().saveSoon();
     return id;
@@ -399,18 +407,25 @@ const useStore = create<StoreState>((set, get) => ({
     if (side === "top") baseY -= forward;
     if (side === "bottom") baseY += forward;
 
+    const shouldLoad = !!node.paperData;
+    console.log('[FRONTEND] Creating child nodes with loading:', shouldLoad, 'for parent:', node.text);
+    
     let c1: ID, c2: ID;
     if (side === "right" || side === "left") {
       // fan vertically
-      c1 = get().addNode({ x: baseX, y: baseY - spread, text: "", isLoading: !!node.paperData });
-      c2 = get().addNode({ x: baseX, y: baseY + spread, text: "", isLoading: !!node.paperData });
+      c1 = get().addNode({ x: baseX, y: baseY - spread, text: "", isLoading: shouldLoad });
+      c2 = get().addNode({ x: baseX, y: baseY + spread, text: "", isLoading: shouldLoad });
     } else {
       // fan horizontally
-      c1 = get().addNode({ x: baseX - spread, y: baseY, text: "", isLoading: !!node.paperData });
-      c2 = get().addNode({ x: baseX + spread, y: baseY, text: "", isLoading: !!node.paperData });
+      c1 = get().addNode({ x: baseX - spread, y: baseY, text: "", isLoading: shouldLoad });
+      c2 = get().addNode({ x: baseX + spread, y: baseY, text: "", isLoading: shouldLoad });
     }
     get().addEdge({ parentNodeId: nodeId, childNodeId: c1 });
     get().addEdge({ parentNodeId: nodeId, childNodeId: c2 });
+    
+    console.log('[FRONTEND] Created nodes:', c1, c2, 'with loading state');
+    console.log('[FRONTEND] Node c1 state:', get().nodes[c1]);
+    console.log('[FRONTEND] Node c2 state:', get().nodes[c2]);
     
     // If parent has paper data, fetch related papers
     if (node.paperData?.paperId) {
@@ -418,7 +433,19 @@ const useStore = create<StoreState>((set, get) => ({
         ? '/api/related-papers'
         : 'https://citeseaai.onrender.com/api/related-papers';
       
+      // Collect all existing paper IDs to avoid duplicates
+      const currentBoardId = get().currentBoardId;
+      const allNodes = Object.values(get().nodes).filter(n => n.boardId === currentBoardId);
+      const existingPaperIds = allNodes
+        .filter(n => n.paperData?.paperId)
+        .map(n => n.paperData!.paperId!)
+        .filter(Boolean);
+      
       console.log('[FRONTEND] Fetching related papers for:', node.text);
+      console.log('[FRONTEND] Excluding', existingPaperIds.length, 'existing papers');
+      
+      const startTime = Date.now();
+      const MIN_LOADING_TIME = 1000; // Show loading for at least 1 second
       
       fetch(API_URL, {
         method: 'POST',
@@ -426,7 +453,8 @@ const useStore = create<StoreState>((set, get) => ({
         body: JSON.stringify({
           paperId: node.paperData.paperId,
           title: node.text,
-          abstract: '' // We don't have abstract stored, but Python can work without it
+          abstract: '', // We don't have abstract stored, but Python can work without it
+          excludePaperIds: existingPaperIds // Pass existing paper IDs to filter out
         })
       })
       .then(async response => {
@@ -436,7 +464,13 @@ const useStore = create<StoreState>((set, get) => ({
         }
         return data;
       })
-      .then(result => {
+      .then(async result => {
+        // Ensure minimum loading time so user can see the animation
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < MIN_LOADING_TIME) {
+          await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsedTime));
+        }
+        
         console.log('[FRONTEND] Related papers response:', result);
         if (result.success && result.papers && result.papers.length >= 2) {
           const [paper1, paper2] = result.papers;
@@ -1373,7 +1407,7 @@ export default function MindMapMVP() {
                      }
                    }}
                    onDoubleClick={(e) => onNodeDoubleClick(e, n)}>
-                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill={n.isLoading ? "#27272a" : "#18181b"} stroke={isEditing ? "#3b82f6" : "#3f3f46"} strokeWidth={isEditing ? 2 : 1.6} opacity={n.isLoading ? 0.7 : 1} />
+                  <rect rx={NODE_RX} ry={NODE_RX} width={NODE_W} height={NODE_H} fill={n.isLoading ? "#1e3a8a" : "#18181b"} stroke={n.isLoading ? "#3b82f6" : (isEditing ? "#3b82f6" : "#3f3f46")} strokeWidth={n.isLoading ? 2 : (isEditing ? 2 : 1.6)} opacity={1} />
                   {/* delete X (hide while loading) */}
                   {!n.isLoading && (
                   <g transform={`translate(${NODE_W - 18}, 6)`}>
@@ -1405,13 +1439,13 @@ export default function MindMapMVP() {
                   {!isEditing && (
                   <foreignObject x={12} y={10} width={NODE_W - 24} height={NODE_H - 20} pointerEvents="none">
                       {n.isLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full space-y-2">
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div className="flex flex-col items-center justify-center h-full space-y-3 px-3">
+                          <div className="flex space-x-1.5">
+                            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.6s' }}></div>
+                            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s', animationDuration: '0.6s' }}></div>
+                            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s', animationDuration: '0.6s' }}></div>
                           </div>
-                          <div className="text-xs text-zinc-400 text-center" style={{ fontFamily: "Inter, sans-serif" }}>
+                          <div className="text-xs text-blue-300 text-center font-medium" style={{ fontFamily: "Inter, sans-serif" }}>
                             Finding related papers...
                           </div>
                         </div>
@@ -1892,10 +1926,10 @@ function PaperInfoPopover({
           
           <div>
             <span className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">
-              Highly Influential Citations:{' '}
+              Citations:{' '}
             </span>
             <span className="text-zinc-100 font-medium text-xs">
-              {paperData.influentialCitations?.toLocaleString() || 0}
+              {paperData.citations?.toLocaleString() || 0}
             </span>
           </div>
         </div>

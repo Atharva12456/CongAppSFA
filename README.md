@@ -60,7 +60,7 @@ npm run dev
 - Type your research topic directly into the search bar
 - Press Enter or click "Start →" to create a new mind map
 - Access recent boards from the homepage
-- Click the "ResearchRoot" logo in the top-right corner to return to homepage
+- Click the "CiteSeaAI" logo in the top-right corner to return to homepage
 
 ### Sidebar
 - Toggle sidebar visibility with the menu button (top-left)

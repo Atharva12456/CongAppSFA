@@ -124,7 +124,7 @@ app.post('/api/research', async (req, res) => {
 // Health check endpoint
 // API endpoint to get related papers for a given paper
 app.post('/api/related-papers', async (req, res) => {
-  const { paperId, title, abstract } = req.body;
+  const { paperId, title, abstract, excludePaperIds } = req.body;
   
   if (!paperId) {
     return res.status(400).json({ 
@@ -134,12 +134,18 @@ app.post('/api/related-papers', async (req, res) => {
   }
 
   console.log(`[SERVER] Finding related papers for: "${title || paperId}"`);
+  if (excludePaperIds && excludePaperIds.length > 0) {
+    console.log(`[SERVER] Excluding ${excludePaperIds.length} existing papers`);
+  }
   
   // Spawn Python process
   const pythonScript = path.join(__dirname, 'CongApp.py');
   const args = ['--paper-id', paperId, '--json'];
   if (title) args.push('--title', title);
   if (abstract) args.push('--abstract', abstract);
+  if (excludePaperIds && excludePaperIds.length > 0) {
+    args.push('--exclude-ids', JSON.stringify(excludePaperIds));
+  }
   
   const pythonProcess = spawn('python', [pythonScript, ...args], {
     env: {
