@@ -409,7 +409,7 @@ const useStore = create<StoreState>((set, get) => ({
 
     const shouldLoad = !!node.paperData;
     console.log('[FRONTEND] Creating child nodes with loading:', shouldLoad, 'for parent:', node.text);
-    
+
     let c1: ID, c2: ID;
     if (side === "right" || side === "left") {
       // fan vertically
@@ -423,6 +423,18 @@ const useStore = create<StoreState>((set, get) => ({
     get().addEdge({ parentNodeId: nodeId, childNodeId: c1 });
     get().addEdge({ parentNodeId: nodeId, childNodeId: c2 });
     
+    // Ensure loading state is immediately visible
+    if (shouldLoad) {
+      // Verify nodes have loading state
+      const n1 = get().nodes[c1];
+      const n2 = get().nodes[c2];
+      if (!n1.isLoading || !n2.isLoading) {
+        console.warn('[FRONTEND] Loading state not set correctly, fixing...');
+        get().updateNode(c1, { isLoading: true });
+        get().updateNode(c2, { isLoading: true });
+      }
+    }
+    
     console.log('[FRONTEND] Created nodes:', c1, c2, 'with loading state');
     console.log('[FRONTEND] Node c1 state:', get().nodes[c1]);
     console.log('[FRONTEND] Node c2 state:', get().nodes[c2]);
@@ -433,13 +445,17 @@ const useStore = create<StoreState>((set, get) => ({
         ? 'https://citeseaai.onrender.com/api/related-papers'
         : '/api/related-papers';
       
-      // Collect all existing paper IDs to avoid duplicates
+      // Collect all existing paper IDs to avoid duplicates (including parent)
       const currentBoardId = get().currentBoardId;
       const allNodes = Object.values(get().nodes).filter(n => n.boardId === currentBoardId);
       const existingPaperIds = allNodes
         .filter(n => n.paperData?.paperId)
         .map(n => n.paperData!.paperId!)
         .filter(Boolean);
+      // Always include parent paper ID to avoid showing it as a related paper
+      if (node.paperData?.paperId) {
+        existingPaperIds.push(node.paperData.paperId);
+      }
       
       console.log('[FRONTEND] Fetching related papers for:', node.text);
       console.log('[FRONTEND] Excluding', existingPaperIds.length, 'existing papers');
@@ -1910,7 +1926,7 @@ function PaperInfoPopover({
             <span className="text-zinc-100 font-medium text-xs">
               {paperData.year || 'Unknown'}
             </span>
-          </div>
+    </div>
           
           <div>
             <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wide mb-1">

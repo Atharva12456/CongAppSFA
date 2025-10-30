@@ -253,12 +253,19 @@ def find_top_papers_for_paper(
         query_title = paper.get("title") or ""
         query_abstract = paper.get("abstract") or ""
         query_text = (query_title + " " + query_abstract).strip() or query_title
-        seeds = search_top_papers(query_text, k=top_k * 2)
+        print(f"[FALLBACK] Using keyword search with query: '{query_text[:100]}...'", file=sys.stderr)
+        # Fetch more papers for fallback to ensure we get valid results after filtering
+        fallback_k = max(top_k * 5, 40)  # Get at least 40 or 5x top_k, whichever is larger
+        seeds = search_top_papers(query_text, k=fallback_k)
+        print(f"[FALLBACK] Found {len(seeds)} papers from keyword search", file=sys.stderr)
         for s in seeds:
             sid = s.get("paperId")
-            if sid and sid not in candidates:
+            # Skip the original paper itself
+            if sid and sid != paper_id and sid not in candidates:
                 candidates[sid] = dict(s)
+        print(f"[FALLBACK] Added {len(candidates)} unique candidates from fallback", file=sys.stderr)
         if not candidates:
+            print("[FALLBACK] No papers found even with keyword search fallback", file=sys.stderr)
             return []
 
     # Build query = anchor paper's title + abstract
@@ -417,7 +424,9 @@ if __name__ == "__main__":
         fetch_count = max(10, 2 + len(exclude_ids)) if exclude_ids else 10
         max_fetch = 300  # Try up to 300 papers
         
+        # Always exclude the parent paper itself
         seen_ids = set(exclude_ids) if exclude_ids else set()
+        seen_ids.add(args.paper_id)  # Ensure parent paper is never returned
         accumulated: List[Dict] = []
         while len(valid_papers) < 2 and fetch_count <= max_fetch:
             print(f"[SEARCH] Fetching top {fetch_count} related papers...", file=sys.stderr)
@@ -495,8 +504,8 @@ if __name__ == "__main__":
         topic = args.topic if args.topic else "climate change and urban migration modeling"
     
         print(f"\n[SEARCH] Finding seed papers for topic: {topic}\n", file=sys.stderr)
-    
-    # Time the search operation
+        
+        # Time the search operation
         search_start = time.time()
         
         # Keep fetching more papers until we have at least 4 valid ones
@@ -522,29 +531,29 @@ if __name__ == "__main__":
         for i, p in enumerate(valid_papers[:4], 1):
             print(f"{i}. {p.get('title')} ({p.get('year')}) — Citations: {p.get('citationCount', 0)}", file=sys.stderr)
             
-        total_time = time.time() - total_start
-        
-        # Output JSON to stdout if requested
-        if args.json:
-            output = {
-                "success": True,
-                "topic": topic,
-                "papers": [
-                    {
-                        "title": p.get("title", "Untitled"),
-                        "year": p.get("year", 0),
-                        "citations": p.get("citationCount", 0),
-                        "influentialCitations": p.get("influentialCitationCount", 0),
-                        "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
+    total_time = time.time() - total_start
+    
+    # Output JSON to stdout if requested
+    if args.json:
+        output = {
+            "success": True,
+            "topic": topic,
+            "papers": [
+                {
+                    "title": p.get("title", "Untitled"),
+                    "year": p.get("year", 0),
+                    "citations": p.get("citationCount", 0),
+                    "influentialCitations": p.get("influentialCitationCount", 0),
+                    "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
                             "paperId": p.get("paperId", "")
-                    }
+                }
                         for p in valid_papers[:4]  # Return top 4
-                ],
-                "executionTime": round(total_time, 2)
-            }
-            print(json.dumps(output))
+            ],
+            "executionTime": round(total_time, 2)
+        }
+        print(json.dumps(output))
 
-        else:
+    else:
                 # Manual run - show results in terminal
                 print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
                 for idx, seed in enumerate(valid_papers[:4], 1):
