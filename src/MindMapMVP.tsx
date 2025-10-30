@@ -429,9 +429,9 @@ const useStore = create<StoreState>((set, get) => ({
     
     // If parent has paper data, fetch related papers
     if (node.paperData?.paperId) {
-      const API_URL = window.location.hostname === 'localhost'
-        ? '/api/related-papers'
-        : 'https://citeseaai.onrender.com/api/related-papers';
+      const RELATED_API_URL = IS_PRODUCTION
+        ? 'https://citeseaai.onrender.com/api/related-papers'
+        : '/api/related-papers';
       
       // Collect all existing paper IDs to avoid duplicates
       const currentBoardId = get().currentBoardId;
@@ -447,7 +447,7 @@ const useStore = create<StoreState>((set, get) => ({
       const startTime = Date.now();
       const MIN_LOADING_TIME = 1000; // Show loading for at least 1 second
       
-      fetch(API_URL, {
+      fetch(RELATED_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -763,7 +763,11 @@ export default function MindMapMVP() {
       console.error('Error creating board:', error);
       const errorMessage = error.message || 'Unknown error';
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-        alert('❌ Backend server is not running!\n\nPlease start the backend server:\n1. Open a terminal\n2. Run: npm run server\n\nOr run both servers together with: npm run dev:full');
+        if (IS_PRODUCTION) {
+          alert('❌ Unable to connect to backend server!\n\nThe backend API may be temporarily unavailable or still deploying.\n\nPlease try again in a few moments.\n\nIf the problem persists, check:\n- https://citeseaai.onrender.com/api/health');
+        } else {
+          alert('❌ Backend server is not running!\n\nPlease start the backend server:\n1. Open a terminal\n2. Run: npm run server\n\nOr run both servers together with: npm run dev:full');
+        }
       } else {
         alert(`❌ Failed to create board:\n${errorMessage}\n\nCheck the browser console for details.`);
       }

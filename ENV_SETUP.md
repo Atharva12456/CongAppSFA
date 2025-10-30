@@ -10,14 +10,16 @@
 
 ```bash
 # Create the file manually
-echo "SEMANTIC_SCHOLAR_API_KEY=XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp" > .env
+echo "SEMANTIC_SCHOLAR_API_KEY=your_api_key_here" > .env
 ```
 
 Or create `.env` file manually with this content:
 
 ```
-SEMANTIC_SCHOLAR_API_KEY=XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp
+SEMANTIC_SCHOLAR_API_KEY=your_api_key_here
 ```
+
+**Note**: Replace `your_api_key_here` with your actual Semantic Scholar API key from https://www.semanticscholar.org/product/api
 
 ### 2. Install Dependencies
 
@@ -56,7 +58,7 @@ git push
    - Go to "Environment" tab
    - Add:
      - Key: `SEMANTIC_SCHOLAR_API_KEY`
-     - Value: `XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp`
+     - Value: `your_actual_api_key_here` (get from https://www.semanticscholar.org/product/api)
 6. Click "Create Web Service"
 
 ### Step 3: Update Frontend to Use Backend URL

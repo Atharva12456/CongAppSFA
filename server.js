@@ -9,10 +9,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+
+// CORS configuration - allow GitHub Pages and localhost
+const corsOptions = {
+  origin: [
+    'https://atharva12456.github.io',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // API endpoint to run research analysis
@@ -28,9 +42,10 @@ app.post('/api/research', async (req, res) => {
 
   console.log(`[SERVER] Starting research analysis for topic: "${topic}"`);
   
-  // Spawn Python process
+  // Spawn Python process (try python3 first, fallback to python for Windows)
   const pythonScript = path.join(__dirname, 'CongApp.py');
-  const pythonProcess = spawn('python', [pythonScript, '--topic', topic, '--json'], {
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const pythonProcess = spawn(pythonCmd, [pythonScript, '--topic', topic, '--json'], {
     env: {
       ...process.env, // Pass all environment variables including SEMANTIC_SCHOLAR_API_KEY
       PYTHONIOENCODING: 'utf-8' // Ensure proper encoding
@@ -138,8 +153,9 @@ app.post('/api/related-papers', async (req, res) => {
     console.log(`[SERVER] Excluding ${excludePaperIds.length} existing papers`);
   }
   
-  // Spawn Python process
+  // Spawn Python process (try python3 first, fallback to python for Windows)
   const pythonScript = path.join(__dirname, 'CongApp.py');
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
   const args = ['--paper-id', paperId, '--json'];
   if (title) args.push('--title', title);
   if (abstract) args.push('--abstract', abstract);
@@ -147,7 +163,7 @@ app.post('/api/related-papers', async (req, res) => {
     args.push('--exclude-ids', JSON.stringify(excludePaperIds));
   }
   
-  const pythonProcess = spawn('python', [pythonScript, ...args], {
+  const pythonProcess = spawn(pythonCmd, [pythonScript, ...args], {
     env: {
       ...process.env,
       PYTHONIOENCODING: 'utf-8'
