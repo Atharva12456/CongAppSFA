@@ -155,7 +155,7 @@ This project is configured to automatically deploy to GitHub Pages using GitHub 
 
 3. **Access your app**:
    - After the workflow completes, your app will be available at:
-   - `https://[your-username].github.io/CongressionalAppChallenge/`
+   - `https://[your-username].github.io/CongAppSFA/`
 
 ### Manual Deployment
 
@@ -172,7 +172,7 @@ If you prefer to deploy manually:
 
 ### Configuration Notes
 
-- The `base` path in `vite.config.ts` is set to `/CongressionalAppChallenge/`
+- The `base` path in `vite.config.ts` is set to `/CongAppSFA/`
 - If you rename the repository, update the `base` path accordingly
 - The GitHub Actions workflow (`.github/workflows/deploy.yml`) handles automatic deployment
 
