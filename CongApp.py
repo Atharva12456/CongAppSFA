@@ -5,13 +5,14 @@ import json
 import sys
 import os
 
-# Read API key strictly from environment variable
-API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY')
+# Read API key from environment variable, with fallback for local development
+# NOTE: Hardcoded fallback is ONLY for local development. Production must use environment variable.
+API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY') or 'XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp'
 
-# Set up headers only if API key is present
+# Set up headers with API key
 headers = {"x-api-key": API_KEY} if API_KEY else {}
-if not API_KEY:
-    print("[WARN] SEMANTIC_SCHOLAR_API_KEY is not set; API requests may fail.", file=sys.stderr)
+if not os.environ.get('SEMANTIC_SCHOLAR_API_KEY'):
+    print("[INFO] Using local development API key (not from environment)", file=sys.stderr)
 
 BASE = "https://api.semanticscholar.org/graph/v1"
 
@@ -498,7 +499,7 @@ if __name__ == "__main__":
             for idx, p in enumerate(valid_papers[:2], 1):
                 _pretty_print_seed(p, idx)
     
-   # MODE 2: Find papers by topic (original behavior)
+    # MODE 2: Find papers by topic (original behavior)
     else:
         # Use provided topic or default
         topic = args.topic if args.topic else "climate change and urban migration modeling"
@@ -530,34 +531,33 @@ if __name__ == "__main__":
         print(f"\n[RESULTS] Found {len(valid_papers)} valid papers (showing top 4)", file=sys.stderr)
         for i, p in enumerate(valid_papers[:4], 1):
             print(f"{i}. {p.get('title')} ({p.get('year')}) — Citations: {p.get('citationCount', 0)}", file=sys.stderr)
-            
-    total_time = time.time() - total_start
-    
-    # Output JSON to stdout if requested
-    if args.json:
-        output = {
-            "success": True,
-            "topic": topic,
-            "papers": [
-                {
-                    "title": p.get("title", "Untitled"),
-                    "year": p.get("year", 0),
-                    "citations": p.get("citationCount", 0),
-                    "influentialCitations": p.get("influentialCitationCount", 0),
-                    "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
-                            "paperId": p.get("paperId", "")
-                }
-                        for p in valid_papers[:4]  # Return top 4
-            ],
-            "executionTime": round(total_time, 2)
-        }
-        print(json.dumps(output))
-
-    else:
-                # Manual run - show results in terminal
-                print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
-                for idx, seed in enumerate(valid_papers[:4], 1):
-                    _pretty_print_seed(seed, idx)
+        
+        total_time = time.time() - total_start
+        
+        # Output JSON to stdout if requested
+        if args.json:
+            output = {
+                "success": True,
+                "topic": topic,
+                "papers": [
+                    {
+                        "title": p.get("title", "Untitled"),
+                        "year": p.get("year", 0),
+                        "citations": p.get("citationCount", 0),
+                        "influentialCitations": p.get("influentialCitationCount", 0),
+                        "authors": [a.get("name", "Unknown") for a in p.get("authors", [])],
+                        "paperId": p.get("paperId", "")
+                    }
+                    for p in valid_papers[:4]  # Return top 4
+                ],
+                "executionTime": round(total_time, 2)
+            }
+            print(json.dumps(output))
+        else:
+            # Manual run - show results in terminal
+            print(f"\n[SEARCH] Got {len(valid_papers)} valid paper(s).")
+            for idx, seed in enumerate(valid_papers[:4], 1):
+                _pretty_print_seed(seed, idx)
 """
 if __name__ == "__main__":
     # Start total timer
