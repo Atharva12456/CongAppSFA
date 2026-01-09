@@ -7,7 +7,7 @@ import os
 
 # Read API key from environment variable, with fallback for local development
 # NOTE: Hardcoded fallback is ONLY for local development. Production must use environment variable.
-API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY') or 'XcsKxF9OmO6fbLVAVTFTx9wemVW2AYrU8vfZXBvp'
+API_KEY = os.environ.get('SEMANTIC_SCHOLAR_API_KEY') 
 
 # Set up headers with API key
 headers = {"x-api-key": API_KEY} if API_KEY else {}
